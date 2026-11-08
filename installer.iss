@@ -1,7 +1,7 @@
 ; Script generated for Inno Setup 6
 ; Fujifier Installer Script
 #define MyAppName "Fujifier"
-#define MyAppVersion "2.1.1"
+#define MyAppVersion "2.3.0"
 #define MyAppPublisher "Isidore Paulin"
 #define MyAppURL "https://fujifier.cc"
 #define MyAppExeName "Fujifier.exe"
@@ -11,7 +11,7 @@
 #endif
 
 #ifndef MyOutputBaseFilename
-#define MyOutputBaseFilename "Fujifier-v2.1.1-Setup"
+#define MyOutputBaseFilename "Fujifier-v2.3.0-Setup"
 #endif
 
 #ifndef MyArchAllowed
@@ -96,4 +96,4 @@ Root: HKA; Subkey: "Software\Classes\Fujifier.RAW\shell\open\command"; ValueType
 Root: HKA; Subkey: "Software\Classes\Fujifier.Menu"; Flags: uninsdeletekey
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent runasoriginaluser

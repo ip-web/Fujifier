@@ -120,7 +120,7 @@ namespace Fujify.Services
             if (_httpClient.DefaultRequestHeaders.UserAgent.Count == 0)
             {
                 _httpClient.DefaultRequestHeaders.UserAgent.Add(
-                    new ProductInfoHeaderValue("Fujifier-App", "2.1.1"));
+                    new ProductInfoHeaderValue("Fujifier-App", "2.3.0"));
             }
 
             Initialize();
@@ -257,7 +257,7 @@ namespace Fujify.Services
                     DeviceId = deviceId,
                     DeviceName = deviceName,
                     Platform = platform,
-                    AppVersion = "2.1.1"
+                    AppVersion = "2.3.0"
                 };
 
                 string url = $"{GetApiBaseUrl()}/license/activate";
@@ -1307,7 +1307,7 @@ namespace Fujify.Services
                     DeviceId = CurrentDeviceId,
                     DeviceName = _deviceIdentity.GetDeviceName(),
                     Platform = _deviceIdentity.GetPlatform(),
-                    AppVersion = "2.1.1",
+                    AppVersion = "2.3.0",
                     LastCheckIn = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")
                 }
             });
