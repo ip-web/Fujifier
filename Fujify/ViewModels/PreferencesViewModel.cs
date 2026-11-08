@@ -492,6 +492,14 @@ namespace Fujify.ViewModels
                     OnPropertyChanged(nameof(IsFrenchSelected));
                     OnPropertyChanged(nameof(IsSpanishSelected));
                     OnPropertyChanged(nameof(IsGermanSelected));
+                    OnPropertyChanged(nameof(IsItalianSelected));
+                    OnPropertyChanged(nameof(IsJapaneseSelected));
+                    OnPropertyChanged(nameof(IsChineseSelected));
+                    OnPropertyChanged(nameof(IsPortugueseSelected));
+                    OnPropertyChanged(nameof(IsKoreanSelected));
+                    OnPropertyChanged(nameof(IsDutchSelected));
+                    OnPropertyChanged(nameof(IsRussianSelected));
+                    OnPropertyChanged(nameof(IsPolishSelected));
                     LocalizationManager.Instance.SetLanguage(normalized);
                 }
             }
@@ -519,6 +527,54 @@ namespace Fujify.ViewModels
         {
             get => _language.Equals("de", StringComparison.OrdinalIgnoreCase);
             set { if (value) Language = "de"; }
+        }
+
+        public bool IsItalianSelected
+        {
+            get => _language.Equals("it", StringComparison.OrdinalIgnoreCase);
+            set { if (value) Language = "it"; }
+        }
+
+        public bool IsJapaneseSelected
+        {
+            get => _language.Equals("ja", StringComparison.OrdinalIgnoreCase);
+            set { if (value) Language = "ja"; }
+        }
+
+        public bool IsChineseSelected
+        {
+            get => _language.Equals("zh", StringComparison.OrdinalIgnoreCase);
+            set { if (value) Language = "zh"; }
+        }
+
+        public bool IsPortugueseSelected
+        {
+            get => _language.Equals("pt", StringComparison.OrdinalIgnoreCase);
+            set { if (value) Language = "pt"; }
+        }
+
+        public bool IsKoreanSelected
+        {
+            get => _language.Equals("ko", StringComparison.OrdinalIgnoreCase);
+            set { if (value) Language = "ko"; }
+        }
+
+        public bool IsDutchSelected
+        {
+            get => _language.Equals("nl", StringComparison.OrdinalIgnoreCase);
+            set { if (value) Language = "nl"; }
+        }
+
+        public bool IsRussianSelected
+        {
+            get => _language.Equals("ru", StringComparison.OrdinalIgnoreCase);
+            set { if (value) Language = "ru"; }
+        }
+
+        public bool IsPolishSelected
+        {
+            get => _language.Equals("pl", StringComparison.OrdinalIgnoreCase);
+            set { if (value) Language = "pl"; }
         }
 
         public bool SuppressBackupConfirmation { get; set; }

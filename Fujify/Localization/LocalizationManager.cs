@@ -28,7 +28,7 @@ namespace Fujify.Localization
 {
     public record LanguageItem(string Code, string DisplayName, string NativeName);
 
-    public class LocalizationManager : INotifyPropertyChanged
+    public partial class LocalizationManager : INotifyPropertyChanged
     {
         private static readonly Lazy<LocalizationManager> _lazyInstance = new(() => new LocalizationManager());
         public static LocalizationManager Instance => _lazyInstance.Value;
@@ -41,7 +41,15 @@ namespace Fujify.Localization
             new("en", "English", "English"),
             new("fr", "French", "Français"),
             new("es", "Spanish", "Español"),
-            new("de", "German", "Deutsch")
+            new("de", "German", "Deutsch"),
+            new("it", "Italian", "Italiano"),
+            new("ja", "Japanese", "日本語"),
+            new("zh", "Chinese (Simplified)", "简体中文"),
+            new("pt", "Portuguese", "Português"),
+            new("ko", "Korean", "한국어"),
+            new("nl", "Dutch", "Nederlands"),
+            new("ru", "Russian", "Русский"),
+            new("pl", "Polish", "Polski")
         };
 
         private string _currentLanguage = "en";
@@ -121,6 +129,14 @@ namespace Fujify.Localization
             if (lower.StartsWith("fr")) return "fr";
             if (lower.StartsWith("es")) return "es";
             if (lower.StartsWith("de")) return "de";
+            if (lower.StartsWith("it")) return "it";
+            if (lower.StartsWith("ja")) return "ja";
+            if (lower.StartsWith("zh")) return "zh";
+            if (lower.StartsWith("pt")) return "pt";
+            if (lower.StartsWith("ko")) return "ko";
+            if (lower.StartsWith("nl")) return "nl";
+            if (lower.StartsWith("ru")) return "ru";
+            if (lower.StartsWith("pl")) return "pl";
             return "en";
         }
 
@@ -1374,6 +1390,15 @@ namespace Fujify.Localization
                 ["AutoOpenInCaptureOneDesc"] = "Startet Capture One automatisch mit verarbeiteten RAF-Dateien",
             };
             _translations["de"] = de;
+
+            RegisterItalian();
+            RegisterJapanese();
+            RegisterChinese();
+            RegisterPortuguese();
+            RegisterKorean();
+            RegisterDutch();
+            RegisterRussian();
+            RegisterPolish();
         }
     }
 }

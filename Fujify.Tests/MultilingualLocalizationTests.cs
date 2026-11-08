@@ -44,13 +44,22 @@ namespace Fujify.Tests
         #region 1. LocalizationManager Core Tests
 
         [Fact]
-        public void AvailableLanguages_ContainsEnglishFrenchSpanishGerman()
+        public void AvailableLanguages_ContainsAllExpectedLanguages()
         {
             var languages = LocalizationManager.AvailableLanguages;
             Assert.Contains(languages, l => l.Code == "en");
             Assert.Contains(languages, l => l.Code == "fr");
             Assert.Contains(languages, l => l.Code == "es");
             Assert.Contains(languages, l => l.Code == "de");
+            Assert.Contains(languages, l => l.Code == "it");
+            Assert.Contains(languages, l => l.Code == "ja");
+            Assert.Contains(languages, l => l.Code == "zh");
+            Assert.Contains(languages, l => l.Code == "pt");
+            Assert.Contains(languages, l => l.Code == "ko");
+            Assert.Contains(languages, l => l.Code == "nl");
+            Assert.Contains(languages, l => l.Code == "ru");
+            Assert.Contains(languages, l => l.Code == "pl");
+            Assert.Equal(12, languages.Count);
         }
 
         [Theory]
@@ -61,6 +70,22 @@ namespace Fujify.Tests
         [InlineData("es-ES", "es")]
         [InlineData("de", "de")]
         [InlineData("de-DE", "de")]
+        [InlineData("it", "it")]
+        [InlineData("it-IT", "it")]
+        [InlineData("ja", "ja")]
+        [InlineData("ja-JP", "ja")]
+        [InlineData("zh", "zh")]
+        [InlineData("zh-CN", "zh")]
+        [InlineData("pt", "pt")]
+        [InlineData("pt-BR", "pt")]
+        [InlineData("ko", "ko")]
+        [InlineData("ko-KR", "ko")]
+        [InlineData("nl", "nl")]
+        [InlineData("nl-NL", "nl")]
+        [InlineData("ru", "ru")]
+        [InlineData("ru-RU", "ru")]
+        [InlineData("pl", "pl")]
+        [InlineData("pl-PL", "pl")]
         [InlineData("en", "en")]
         [InlineData("en-US", "en")]
         [InlineData("unknown", "en")]
@@ -351,6 +376,14 @@ namespace Fujify.Tests
         [InlineData("fr")]
         [InlineData("es")]
         [InlineData("de")]
+        [InlineData("it")]
+        [InlineData("ja")]
+        [InlineData("zh")]
+        [InlineData("pt")]
+        [InlineData("ko")]
+        [InlineData("nl")]
+        [InlineData("ru")]
+        [InlineData("pl")]
         public void Translations_AllLanguagesContainAllCriticalKeys(string langCode)
         {
             try
