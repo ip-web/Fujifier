@@ -18,10 +18,13 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Fujify.Common
 {
@@ -29,6 +32,15 @@ namespace Fujify.Common
     {
         [DllImport("shell32.dll", CharSet = CharSet.Auto)]
         private static extern bool ShellExecuteEx(ref SHELLEXECUTEINFO lpExecInfo);
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern IntPtr GetProp(IntPtr hWnd, string lpString);
+
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
         private struct SHELLEXECUTEINFO
@@ -111,6 +123,404 @@ namespace Fujify.Common
             {
                 Debug.WriteLine($"Error launching path {path}: {ex.Message}");
             }
+        }
+
+        public static bool OpenInCaptureOne(IReadOnlyList<string> filePaths)
+        {
+            if (filePaths == null || filePaths.Count == 0) return false;
+
+            var validFiles = filePaths.Where(File.Exists).ToList();
+            if (validFiles.Count == 0) return false;
+
+            // 1. Mobile platform callback (e.g. iOS)
+            if (Fujify.ViewModels.MainViewModel.PlatformOpenInCaptureOneCallback != null)
+            {
+                Fujify.ViewModels.MainViewModel.PlatformOpenInCaptureOneCallback(validFiles);
+                return true;
+            }
+
+            // 2. Windows implementation
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                string? exePath = FindCaptureOneWindows();
+                string executable = (!string.IsNullOrEmpty(exePath) && File.Exists(exePath)) ? exePath : "CaptureOne.exe";
+
+                // Check BEFORE launching whether Capture One is already running
+                bool alreadyRunning = Process.GetProcessesByName("CaptureOne").Length > 0;
+
+                if (!alreadyRunning && validFiles.Count > 1)
+                {
+                    // Cold start with multiple files:
+                    // Launch Capture One with NO arguments so its main window and IPC receiver initialize cleanly
+                    // without modal blocking, then queue all files once IPC is ready.
+                    bool launched = LaunchCaptureOneAppWindows(executable);
+                    if (!launched && executable != "CaptureOne.exe")
+                    {
+                        launched = LaunchCaptureOneAppWindows("CaptureOne.exe");
+                        if (launched) executable = "CaptureOne.exe";
+                    }
+
+                    if (!launched)
+                    {
+                        // Fallback: default shell open
+                        try
+                        {
+                            foreach (var f in validFiles) OpenPath(f);
+                            return true;
+                        }
+                        catch { return false; }
+                    }
+
+                    string targetExe = executable;
+                    _ = Task.Run(async () =>
+                    {
+                        if (!OperatingSystem.IsWindows()) return;
+                        try
+                        {
+                            // Wait for Capture One to start and register its IPC receiver window property
+                            int maxWaitMs = 25000;
+                            int waitedMs = 0;
+
+                            while (waitedMs < maxWaitMs)
+                            {
+                                await Task.Delay(300);
+                                waitedMs += 300;
+
+                                if (IsCaptureOneIpcReady())
+                                {
+                                    break;
+                                }
+                            }
+
+                            // Deliver first file to trigger the Importer modal
+                            var proc0 = LaunchCaptureOneProcessWindows(targetExe, validFiles[0]);
+                            if (proc0 != null)
+                            {
+                                try { proc0.WaitForExit(3000); } catch { }
+                            }
+
+                            // Allow time for the Importer modal to initialize and display
+                            await Task.Delay(1500);
+
+                            // Deliver each remaining file to AddFileToImporterCollection
+                            foreach (var f in validFiles.Skip(1))
+                            {
+                                var proc = LaunchCaptureOneProcessWindows(targetExe, f);
+                                if (proc != null)
+                                {
+                                    try { proc.WaitForExit(3000); } catch { }
+                                }
+                                await Task.Delay(150);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"[CrossPlatformLauncher] Error queuing Capture One files: {ex.Message}");
+                        }
+                    });
+
+                    return true;
+                }
+                else
+                {
+                    // Capture One already running OR single file cold start:
+                    // Launch first file directly into Capture One to trigger import modal preloading
+                    bool success = LaunchCaptureOneFileWindows(executable, validFiles[0]);
+                    if (!success && executable != "CaptureOne.exe")
+                    {
+                        success = LaunchCaptureOneFileWindows("CaptureOne.exe", validFiles[0]);
+                        if (success) executable = "CaptureOne.exe";
+                    }
+
+                    if (!success)
+                    {
+                        try
+                        {
+                            foreach (var f in validFiles) OpenPath(f);
+                            return true;
+                        }
+                        catch { return false; }
+                    }
+
+                    if (validFiles.Count > 1)
+                    {
+                        var remaining = validFiles.Skip(1).ToList();
+                        string targetExe = executable;
+                        _ = Task.Run(async () =>
+                        {
+                            if (!OperatingSystem.IsWindows()) return;
+                            try
+                            {
+                                await Task.Delay(1500);
+                                foreach (var f in remaining)
+                                {
+                                    var proc = LaunchCaptureOneProcessWindows(targetExe, f);
+                                    if (proc != null)
+                                    {
+                                        try { proc.WaitForExit(3000); } catch { }
+                                    }
+                                    await Task.Delay(150);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.WriteLine($"[CrossPlatformLauncher] Error queuing additional Capture One files: {ex.Message}");
+                            }
+                        });
+                    }
+
+                    return true;
+                }
+            }
+            // 3. macOS implementation
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                try
+                {
+                    var psi = new ProcessStartInfo("open")
+                    {
+                        UseShellExecute = false
+                    };
+                    psi.ArgumentList.Add("-a");
+                    psi.ArgumentList.Add("Capture One");
+                    foreach (var f in validFiles)
+                    {
+                        psi.ArgumentList.Add(f);
+                    }
+                    var proc = Process.Start(psi);
+                    proc?.WaitForExit(3000);
+                    if (proc != null && proc.ExitCode == 0)
+                    {
+                        return true;
+                    }
+                }
+                catch { }
+
+                // Fallback: generic open
+                try
+                {
+                    var psi = new ProcessStartInfo("open") { UseShellExecute = false };
+                    foreach (var f in validFiles)
+                    {
+                        psi.ArgumentList.Add(f);
+                    }
+                    Process.Start(psi);
+                    return true;
+                }
+                catch { }
+            }
+            // 4. Linux implementation
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                try
+                {
+                    foreach (var f in validFiles)
+                    {
+                        OpenPath(f);
+                    }
+                    return true;
+                }
+                catch { }
+            }
+
+            return false;
+        }
+
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+        private static Process? LaunchCaptureOneProcessWindows(string executable, string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return null;
+
+            // 1. ShellExecute (matches Windows Explorer Open With behavior)
+            try
+            {
+                var psi = new ProcessStartInfo(executable)
+                {
+                    UseShellExecute = true,
+                    Arguments = $"\"{filePath}\"",
+                    WorkingDirectory = Path.GetDirectoryName(filePath) ?? string.Empty
+                };
+                return Process.Start(psi);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[CrossPlatformLauncher] ShellExecute failed for {filePath}: {ex.Message}");
+            }
+
+            // 2. Direct Process creation fallback
+            try
+            {
+                var psi = new ProcessStartInfo(executable)
+                {
+                    UseShellExecute = false,
+                    WorkingDirectory = Path.GetDirectoryName(filePath) ?? string.Empty
+                };
+                psi.ArgumentList.Add(filePath);
+                return Process.Start(psi);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[CrossPlatformLauncher] CreateProcess fallback failed for {filePath}: {ex.Message}");
+            }
+
+            return null;
+        }
+
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+        private static bool LaunchCaptureOneFileWindows(string executable, string filePath)
+        {
+            return LaunchCaptureOneProcessWindows(executable, filePath) != null;
+        }
+
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+        private static bool LaunchCaptureOneAppWindows(string executable)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo(executable)
+                {
+                    UseShellExecute = true
+                };
+                var proc = Process.Start(psi);
+                return proc != null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[CrossPlatformLauncher] ShellExecute failed to launch {executable}: {ex.Message}");
+            }
+
+            try
+            {
+                var psi = new ProcessStartInfo(executable)
+                {
+                    UseShellExecute = false
+                };
+                var proc = Process.Start(psi);
+                return proc != null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[CrossPlatformLauncher] CreateProcess fallback failed for {executable}: {ex.Message}");
+            }
+
+            return false;
+        }
+
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+        private static bool IsCaptureOneIpcReady()
+        {
+            bool ready = false;
+            try
+            {
+                EnumWindows((hWnd, lParam) =>
+                {
+                    IntPtr prop = GetProp(hWnd, @"Global\PhaseOne.CaptureOne");
+                    if (prop == hWnd)
+                    {
+                        ready = true;
+                        return false; // Found, stop enumeration
+                    }
+                    return true; // Continue enumeration
+                }, IntPtr.Zero);
+            }
+            catch
+            {
+                var procs = Process.GetProcessesByName("CaptureOne");
+                if (procs.Length > 0)
+                {
+                    var c1 = procs[0];
+                    c1.Refresh();
+                    ready = c1.MainWindowHandle != IntPtr.Zero && !string.IsNullOrEmpty(c1.MainWindowTitle);
+                }
+            }
+            return ready;
+        }
+
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+        private static string? FindCaptureOneWindows()
+        {
+            // A. Check Registry Applications Open Command (matches Explorer Open With)
+            try
+            {
+                using var cmdKey = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(@"Applications\CaptureOne.exe\shell\open\command");
+                if (cmdKey != null)
+                {
+                    string? cmd = cmdKey.GetValue(null)?.ToString();
+                    if (!string.IsNullOrEmpty(cmd))
+                    {
+                        int firstQuote = cmd.IndexOf('"');
+                        if (firstQuote >= 0)
+                        {
+                            int secondQuote = cmd.IndexOf('"', firstQuote + 1);
+                            if (secondQuote > firstQuote)
+                            {
+                                string exe = cmd.Substring(firstQuote + 1, secondQuote - firstQuote - 1);
+                                if (File.Exists(exe)) return exe;
+                            }
+                        }
+                        else
+                        {
+                            string exe = cmd.Split(' ')[0];
+                            if (File.Exists(exe)) return exe;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            // B. Check Registry App Paths
+            try
+            {
+                using var appKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\CaptureOne.exe")
+                                ?? Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\App Paths\CaptureOne.exe");
+                if (appKey != null)
+                {
+                    string? path = appKey.GetValue(null)?.ToString();
+                    if (!string.IsNullOrEmpty(path) && File.Exists(path)) return path;
+                }
+            }
+            catch { }
+
+            // C. Check standard Program Files installation paths
+            var programDirs = new[]
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)
+            };
+
+            foreach (var baseDir in programDirs)
+            {
+                if (string.IsNullOrEmpty(baseDir) || !Directory.Exists(baseDir)) continue;
+
+                var candidateFolders = new[]
+                {
+                    Path.Combine(baseDir, "Capture One"),
+                    Path.Combine(baseDir, "Phase One")
+                };
+
+                foreach (var cFolder in candidateFolders)
+                {
+                    if (!Directory.Exists(cFolder)) continue;
+
+                    string directExe = Path.Combine(cFolder, "Capture One", "CaptureOne.exe");
+                    if (File.Exists(directExe)) return directExe;
+
+                    string rootExe = Path.Combine(cFolder, "CaptureOne.exe");
+                    if (File.Exists(rootExe)) return rootExe;
+
+                    try
+                    {
+                        foreach (var subDir in Directory.GetDirectories(cFolder))
+                        {
+                            string subExe = Path.Combine(subDir, "CaptureOne.exe");
+                            if (File.Exists(subExe)) return subExe;
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            return null;
         }
 
         public static void OpenWith(string filePath)

@@ -388,6 +388,85 @@ namespace Fujify.Tests
         }
 
         [Fact]
+        public async Task FileConflictQueuing_WhenApplyToAllChecked_DismissesQueuedTasksWithoutFurtherPrompts()
+        {
+            var conflictLock = new SemaphoreSlim(1, 1);
+            ConflictChoice? batchConflictChoice = null;
+            int promptCount = 0;
+
+            async Task<ConflictChoice> SimulateFileConflictAsync(string filePath)
+            {
+                var batchChoice = batchConflictChoice;
+                if (batchChoice.HasValue)
+                {
+                    return batchChoice.Value;
+                }
+
+                await conflictLock.WaitAsync();
+                try
+                {
+                    batchChoice = batchConflictChoice;
+                    if (batchChoice.HasValue)
+                    {
+                        return batchChoice.Value;
+                    }
+
+                    // Prompt dialog
+                    Interlocked.Increment(ref promptCount);
+                    await Task.Delay(50); // Simulate user interacting with dialog
+                    var result = new FileConflictResolution(ConflictChoice.Skip, applyToAll: true);
+                    if (result.ApplyToAll)
+                    {
+                        batchConflictChoice = result.Choice;
+                    }
+                    return result.Choice;
+                }
+                finally
+                {
+                    conflictLock.Release();
+                }
+            }
+
+            // Launch 5 parallel tasks encountering conflicts simultaneously
+            var tasks = new[]
+            {
+                SimulateFileConflictAsync("file1.dng"),
+                SimulateFileConflictAsync("file2.dng"),
+                SimulateFileConflictAsync("file3.dng"),
+                SimulateFileConflictAsync("file4.dng"),
+                SimulateFileConflictAsync("file5.dng"),
+            };
+
+            var results = await Task.WhenAll(tasks);
+
+            Assert.Equal(1, promptCount);
+            Assert.All(results, choice => Assert.Equal(ConflictChoice.Skip, choice));
+        }
+
+        [Fact]
+        public async Task ConflictModal_PropertiesAndResolution_ShouldWorkProperly()
+        {
+            var vm = new MainViewModel();
+            string testPath = Path.Combine("C:", "Photos", "Output", "image.raf");
+            vm.ConflictFilePath = testPath;
+
+            Assert.Equal("image.raf", vm.ConflictFileName);
+            Assert.Equal(Path.Combine("C:", "Photos", "Output"), vm.ConflictDirectoryPath);
+
+            // Test modal resolution
+            var tcs = new TaskCompletionSource<FileConflictResolution>();
+            var tcsField = typeof(MainViewModel).GetField("_conflictTcs", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            tcsField!.SetValue(vm, tcs);
+
+            vm.ResolveConflict(ConflictChoice.Overwrite, applyToAll: true);
+
+            var result = await tcs.Task;
+            Assert.Equal(ConflictChoice.Overwrite, result.Choice);
+            Assert.True(result.ApplyToAll);
+            Assert.False(vm.IsModalOpen);
+        }
+
+        [Fact]
         public void FileConflictDialogViewModel_Commands_ShouldReturnExpectedChoices()
         {
             string path = @"C:\Photos\Test.dng";

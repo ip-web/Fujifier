@@ -763,10 +763,17 @@
                                             </Grid>
 
                                             <!-- Open in Lightroom Switch (Mobile & Supported Platforms) -->
-                                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsOpenInLightroomSupported}">
+                                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding ShowOpenInLightroom}">
                                                 <TextBlock Grid.Column="0" Text="{loc:Loc OpenInLightroom}" FontSize="11"
                                                            Foreground="{DynamicResource AppTextPrimaryBrush}" VerticalAlignment="Center"/>
                                                 <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoOpenInLightroom}" OnContent="" OffContent=""/>
+                                            </Grid>
+
+                                            <!-- Open in Capture One Switch (Every platform except Android, when in Capture One mode) -->
+                                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding ShowOpenInCaptureOne}">
+                                                <TextBlock Grid.Column="0" Text="{loc:Loc OpenInCaptureOne}" FontSize="11"
+                                                           Foreground="{DynamicResource AppTextPrimaryBrush}" VerticalAlignment="Center"/>
+                                                <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoOpenInCaptureOne}" OnContent="" OffContent=""/>
                                             </Grid>
 
                                             <!-- Bottom Clearance to ensure last entry never clips -->
@@ -1763,10 +1770,17 @@
                                                     </Grid>
 
                                                     <!-- Open in Lightroom Switch (Mobile & Supported Platforms) -->
-                                                    <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsOpenInLightroomSupported}">
+                                                    <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding ShowOpenInLightroom}">
                                                         <TextBlock Grid.Column="0" Text="{loc:Loc OpenInLightroom}" FontSize="11"
                                                                    Foreground="{DynamicResource AppTextPrimaryBrush}" VerticalAlignment="Center"/>
                                                         <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoOpenInLightroom}" OnContent="" OffContent=""/>
+                                                    </Grid>
+
+                                                    <!-- Open in Capture One Switch (Every platform except Android, when in Capture One mode) -->
+                                                    <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding ShowOpenInCaptureOne}">
+                                                        <TextBlock Grid.Column="0" Text="{loc:Loc OpenInCaptureOne}" FontSize="11"
+                                                                   Foreground="{DynamicResource AppTextPrimaryBrush}" VerticalAlignment="Center"/>
+                                                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoOpenInCaptureOne}" OnContent="" OffContent=""/>
                                                     </Grid>
 
                                                     <!-- Generous bottom padding spacer so content never clips when scrolled to the end -->
@@ -2239,6 +2253,19 @@
                                                        Foreground="{DynamicResource AppTextSecondaryBrush}" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoOpenInLightroom}" OnContent="" OffContent=""/>
+                                    </Grid>
+
+                                    <Separator Height="1" Background="{DynamicResource AppEdgeBrush}" IsVisible="{Binding ShowOpenInCaptureOne}"/>
+
+                                    <!-- Auto-open in Capture One -->
+                                    <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding ShowOpenInCaptureOne}">
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2" Margin="0,0,12,0">
+                                            <TextBlock Text="{loc:Loc AutoOpenInCaptureOne}" FontWeight="SemiBold" FontSize="12"
+                                                       Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                            <TextBlock Text="{loc:Loc AutoOpenInCaptureOneDesc}" FontSize="11"
+                                                       Foreground="{DynamicResource AppTextSecondaryBrush}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoOpenInCaptureOne}" OnContent="" OffContent=""/>
                                     </Grid>
 
                                     <Separator Height="1" Background="{DynamicResource AppEdgeBrush}" IsVisible="False"/>
@@ -2800,6 +2827,49 @@
                                 Height="38" CornerRadius="19" Padding="24,0" HorizontalAlignment="Center"/>
                     </StackPanel>
 
+                    <!-- File Conflict In-App Modal -->
+                    <StackPanel Spacing="14" IsVisible="{Binding IsConflictModal}">
+                        <!-- Title and Icon -->
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Border Width="36" Height="36" CornerRadius="18" Background="#2A2418" BorderBrush="#44F39C12" BorderThickness="1">
+                                <TextBlock Text="⚠" FontSize="16" Foreground="#F39C12" 
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Text="{loc:Loc FileConflictTitle}" FontWeight="SemiBold" FontSize="15"
+                                           Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                <TextBlock Text="{loc:Loc FileConflictPrompt}" 
+                                           Foreground="{DynamicResource AppTextSecondaryBrush}" FontSize="11"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- File Details -->
+                        <Border Background="{DynamicResource AppSurfaceSecondaryBrush}" 
+                                BorderBrush="{DynamicResource AppEdgeBrush}" BorderThickness="1"
+                                CornerRadius="10" Padding="12">
+                            <StackPanel Spacing="3">
+                                <TextBlock Text="{Binding ConflictFileName}" FontWeight="SemiBold" FontSize="13"
+                                           Foreground="{DynamicResource AppTextPrimaryBrush}" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding ConflictDirectoryPath}" FontSize="10.5" 
+                                           Foreground="{DynamicResource AppTextSecondaryBrush}" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Apply to All Checkbox -->
+                        <CheckBox Content="{loc:Loc ApplyToAllConflicts}" 
+                                  IsChecked="{Binding ConflictApplyToAll, Mode=TwoWay}" FontSize="11.5"/>
+
+                        <!-- Action Buttons -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                            <Button Content="{loc:Loc ConflictSkip}" Command="{Binding ResolveConflictCommand}" CommandParameter="Skip" Classes="secondary" Height="36" Padding="14,0" CornerRadius="18"
+                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+                            <Button Content="{loc:Loc ConflictKeepBoth}" Command="{Binding ResolveConflictCommand}" CommandParameter="UseUniqueName" Classes="secondary" Height="36" Padding="14,0" CornerRadius="18"
+                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+                            <Button Content="{loc:Loc ConflictOverwrite}" Command="{Binding ResolveConflictCommand}" CommandParameter="Overwrite" Classes="primary" Height="36" Padding="16,0" CornerRadius="18"
+                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
+
                     <!-- Batch Summary Card Modal -->
                     <StackPanel Spacing="16" IsVisible="{Binding IsBatchSummaryModal}">
                         <!-- Header: Icon & Badge -->
@@ -2836,10 +2906,10 @@
                                     <TextBlock Text="{Binding BatchSummaryVolumeText}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
                                 </StackPanel>
 
-                                <!-- Stat 4: Simulation -->
+                                <!-- Stat 4: Target Mode -->
                                 <StackPanel Grid.Row="1" Grid.Column="1" Spacing="2" Margin="6,4">
-                                    <TextBlock Text="{loc:Loc Simulation}" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
-                                    <TextBlock Text="{Binding TargetCameraModel}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource AppAccentBrush}"
+                                    <TextBlock Text="{loc:Loc TargetMode}" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                                    <TextBlock Text="{Binding BatchSummaryTargetModeText}" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource AppAccentBrush}"
                                                TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
                             </Grid>
@@ -2851,9 +2921,17 @@
 
                         <!-- Action Buttons -->
                         <StackPanel Spacing="8">
+                            <!-- Open in Capture One (Visible in Capture One mode when supported and files converted) -->
+                            <Button Content="{loc:Loc OpenInCaptureOne}" Command="{Binding OpenInCaptureOneCommand}"
+                                    IsVisible="{Binding CanOpenInCaptureOne}" Classes="primary"
+                                    Height="38" Padding="14,0" CornerRadius="19" HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+
                             <!-- Open Output Folder (Desktop only) -->
                             <Button Content="{loc:Loc OpenOutputFolder}" Command="{Binding OpenOutputFolderCommand}"
-                                    IsVisible="{Binding CanOpenOutputFolder}" Classes="primary"
+                                    IsVisible="{Binding CanOpenOutputFolder}"
+                                    Classes.primary="{Binding !CanOpenInCaptureOne}"
+                                    Classes.secondary="{Binding CanOpenInCaptureOne}"
                                     Height="38" Padding="14,0" CornerRadius="19" HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
 

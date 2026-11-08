@@ -21,6 +21,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Fujify.Common;
 using Fujify.Services;
 using Fujify.ViewModels;
 using Xunit;
@@ -1167,6 +1168,314 @@ namespace Fujify.Tests
                 {
                     try { if (File.Exists(tempOutput)) File.Delete(tempOutput); } catch { }
                 }
+            }
+        }
+
+        #endregion
+
+        #region Open in Capture One Tests
+
+        [Fact]
+        public void IsOpenInCaptureOneSupported_MatchesPlatformRules()
+        {
+            var mockSettings = new MockSettingsService();
+            var mainVm = new MainViewModel(settingsService: mockSettings);
+            var prefVm = new PreferencesViewModel(mockSettings);
+
+            bool expected = !OperatingSystem.IsAndroid();
+            Assert.Equal(expected, mainVm.IsOpenInCaptureOneSupported);
+            Assert.Equal(expected, prefVm.IsOpenInCaptureOneSupported);
+        }
+
+        [Fact]
+        public void ShowOpenInCaptureOne_And_ShowOpenInLightroom_FollowSelectedMode()
+        {
+            var mockSettings = new MockSettingsService();
+            mockSettings.Settings.EnableCaptureOneMode = true;
+            mockSettings.Settings.ConversionTargetMode = "Lightroom";
+
+            var vm = new MainViewModel(settingsService: mockSettings);
+
+            // In Lightroom mode:
+            Assert.True(vm.IsLightroomModeSelected);
+            Assert.False(vm.IsCaptureOneModeSelected);
+            Assert.False(vm.ShowOpenInCaptureOne);
+            Assert.Equal(vm.IsOpenInLightroomSupported, vm.ShowOpenInLightroom);
+
+            // Switch to Capture One mode:
+            vm.SelectCaptureOneModeCommand.Execute(null);
+            Assert.False(vm.IsLightroomModeSelected);
+            Assert.True(vm.IsCaptureOneModeSelected);
+            Assert.False(vm.ShowOpenInLightroom);
+            Assert.Equal(vm.IsOpenInCaptureOneSupported, vm.ShowOpenInCaptureOne);
+        }
+
+        [Fact]
+        public void MainViewModel_AutoOpenInCaptureOne_PersistsAndUpdatesSummary()
+        {
+            var mockSettings = new MockSettingsService();
+            mockSettings.Settings.EnableCaptureOneMode = true;
+            mockSettings.Settings.ConversionTargetMode = "CaptureOne";
+
+            var vm = new MainViewModel(settingsService: mockSettings);
+            vm.SelectCaptureOneModeCommand.Execute(null);
+
+            vm.AutoOpenInCaptureOne = true;
+            Assert.True(mockSettings.Settings.AutoOpenInCaptureOne);
+            if (vm.IsOpenInCaptureOneSupported)
+            {
+                Assert.Contains("Capture One", vm.QuickSettingsSummary);
+            }
+
+            vm.AutoOpenInCaptureOne = false;
+            Assert.False(mockSettings.Settings.AutoOpenInCaptureOne);
+            Assert.DoesNotContain("Capture One", vm.QuickSettingsSummary);
+        }
+
+        [Fact]
+        public void PreferencesViewModel_ShowOpenInCaptureOne_TogglesWithCaptureOneMode()
+        {
+            var mockSettings = new MockSettingsService();
+            mockSettings.Settings.EnableCaptureOneMode = false;
+
+            var prefVm = new PreferencesViewModel(mockSettings);
+            Assert.False(prefVm.ShowOpenInCaptureOne);
+
+            prefVm.EnableCaptureOneMode = true;
+            Assert.Equal(prefVm.IsOpenInCaptureOneSupported, prefVm.ShowOpenInCaptureOne);
+
+            prefVm.AutoOpenInCaptureOne = true;
+            prefVm.SaveCommand.Execute(null);
+            Assert.True(mockSettings.Settings.AutoOpenInCaptureOne);
+        }
+
+        [Fact]
+        public void MainViewModel_CanOpenInCaptureOne_And_ButtonClass_WorkCorrectly()
+        {
+            var mockSettings = new MockSettingsService();
+            mockSettings.Settings.EnableCaptureOneMode = true;
+            mockSettings.Settings.ConversionTargetMode = "CaptureOne";
+
+            var vm = new MainViewModel(settingsService: mockSettings);
+            vm.SelectCaptureOneModeCommand.Execute(null);
+
+            // Before any files converted
+            Assert.False(vm.CanOpenInCaptureOne);
+            Assert.Equal("primary", vm.OpenOutputFolderButtonClass);
+
+            // Simulate converted files and batch completion modal
+            var field = typeof(MainViewModel).GetField("_recentlyConvertedDngFiles", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Assert.NotNull(field);
+            var list = (System.Collections.Generic.List<string>)field.GetValue(vm)!;
+            list.Add(@"C:\output\sample.raf");
+
+            vm.ModalTitle = "Processing completed";
+
+            if (vm.IsOpenInCaptureOneSupported)
+            {
+                Assert.True(vm.CanOpenInCaptureOne);
+                Assert.Equal("secondary", vm.OpenOutputFolderButtonClass);
+            }
+        }
+
+        [Fact]
+        public void MainViewModel_OpenInCaptureOneCommand_InvokesPlatformCallback()
+        {
+            var mockSettings = new MockSettingsService();
+            mockSettings.Settings.EnableCaptureOneMode = true;
+            mockSettings.Settings.ConversionTargetMode = "CaptureOne";
+
+            var vm = new MainViewModel(settingsService: mockSettings);
+            vm.SelectCaptureOneModeCommand.Execute(null);
+
+            var field = typeof(MainViewModel).GetField("_recentlyConvertedDngFiles", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var list = (System.Collections.Generic.List<string>)field!.GetValue(vm)!;
+            list.Add(@"C:\output\test_file.raf");
+
+            System.Collections.Generic.IReadOnlyList<string>? received = null;
+            MainViewModel.PlatformOpenInCaptureOneCallback = files => received = files;
+
+            try
+            {
+                vm.OpenInCaptureOneCommand.Execute(null);
+                Assert.NotNull(received);
+                Assert.Single(received);
+                Assert.Equal(@"C:\output\test_file.raf", received[0]);
+            }
+            finally
+            {
+                MainViewModel.PlatformOpenInCaptureOneCallback = null;
+            }
+        }
+
+        [Fact]
+        public void CrossPlatformLauncher_OpenInCaptureOne_HandlesNullOrEmptySafely()
+        {
+            Assert.False(CrossPlatformLauncher.OpenInCaptureOne(null!));
+            Assert.False(CrossPlatformLauncher.OpenInCaptureOne(new System.Collections.Generic.List<string>()));
+        }
+
+        [Fact]
+        public void MainViewModel_OpenInCaptureOneCommand_PassesAllBatchFiles()
+        {
+            var mockSettings = new MockSettingsService();
+            mockSettings.Settings.EnableCaptureOneMode = true;
+            mockSettings.Settings.ConversionTargetMode = "CaptureOne";
+
+            var vm = new MainViewModel(settingsService: mockSettings);
+            vm.SelectCaptureOneModeCommand.Execute(null);
+
+            var field = typeof(MainViewModel).GetField("_recentlyConvertedDngFiles", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var list = (System.Collections.Generic.List<string>)field!.GetValue(vm)!;
+            list.AddRange(new[]
+            {
+                @"C:\output\batch_img1.raf",
+                @"C:\output\batch_img2.raf",
+                @"C:\output\batch_img3.raf",
+                @"C:\output\batch_img4.raf",
+                @"C:\output\batch_img5.raf"
+            });
+
+            System.Collections.Generic.IReadOnlyList<string>? received = null;
+            MainViewModel.PlatformOpenInCaptureOneCallback = files => received = files;
+
+            try
+            {
+                vm.OpenInCaptureOneCommand.Execute(null);
+                Assert.NotNull(received);
+                Assert.Equal(5, received.Count);
+                Assert.Equal(@"C:\output\batch_img1.raf", received[0]);
+                Assert.Equal(@"C:\output\batch_img5.raf", received[4]);
+            }
+            finally
+            {
+                MainViewModel.PlatformOpenInCaptureOneCallback = null;
+            }
+        }
+
+        [Fact]
+        public void CrossPlatformLauncher_OpenInCaptureOne_PassesAllFilesToMobileCallback()
+        {
+            var testFiles = new[]
+            {
+                Path.GetTempFileName(),
+                Path.GetTempFileName(),
+                Path.GetTempFileName()
+            };
+
+            System.Collections.Generic.IReadOnlyList<string>? received = null;
+            MainViewModel.PlatformOpenInCaptureOneCallback = files => received = files;
+
+            try
+            {
+                bool launched = CrossPlatformLauncher.OpenInCaptureOne(testFiles);
+                Assert.True(launched);
+                Assert.NotNull(received);
+                Assert.Equal(3, received.Count);
+                Assert.Equal(testFiles[0], received[0]);
+                Assert.Equal(testFiles[1], received[1]);
+                Assert.Equal(testFiles[2], received[2]);
+            }
+            finally
+            {
+                MainViewModel.PlatformOpenInCaptureOneCallback = null;
+                foreach (var f in testFiles)
+                {
+                    try { File.Delete(f); } catch { }
+                }
+            }
+        }
+
+        [Fact]
+        public void MainViewModel_UnifiedCommand_ClosesModalAndOpensCaptureOne()
+        {
+            var mockSettings = new MockSettingsService();
+            mockSettings.Settings.EnableCaptureOneMode = true;
+            mockSettings.Settings.ConversionTargetMode = "CaptureOne";
+            mockSettings.Settings.AutoOpenInCaptureOne = true;
+
+            var vm = new MainViewModel(settingsService: mockSettings);
+            vm.SelectCaptureOneModeCommand.Execute(null);
+
+            var field = typeof(MainViewModel).GetField("_recentlyConvertedDngFiles", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var list = (System.Collections.Generic.List<string>)field!.GetValue(vm)!;
+            list.AddRange(new[] { @"C:\output\file1.raf", @"C:\output\file2.raf" });
+
+            // Simulate modal currently being open at batch summary
+            vm.ShowBatchSummaryModal(2, 2, TimeSpan.FromSeconds(1), 1024, false);
+            Assert.True(vm.IsModalOpen);
+
+            System.Collections.Generic.IReadOnlyList<string>? received = null;
+            MainViewModel.PlatformOpenInCaptureOneCallback = files => received = files;
+
+            try
+            {
+                // Both the option switch and modal button invoke OpenInCaptureOneCommand
+                vm.OpenInCaptureOneCommand.Execute(null);
+
+                // Verifies modal is dismissed and all converted files are forwarded
+                Assert.False(vm.IsModalOpen);
+                Assert.NotNull(received);
+                Assert.Equal(2, received.Count);
+                Assert.Equal(@"C:\output\file1.raf", received[0]);
+                Assert.Equal(@"C:\output\file2.raf", received[1]);
+            }
+            finally
+            {
+                MainViewModel.PlatformOpenInCaptureOneCallback = null;
+            }
+        }
+
+        [Fact]
+        public void CanOpenInCaptureOne_WhenAllFilesSkipped_ReturnsTrueAndPreloadsSkippedFiles()
+        {
+            var mockSettings = new MockSettingsService();
+            mockSettings.Settings.EnableCaptureOneMode = true;
+            mockSettings.Settings.ConversionTargetMode = "CaptureOne";
+
+            var vm = new MainViewModel(settingsService: mockSettings);
+            vm.SelectCaptureOneModeCommand.Execute(null);
+
+            // Populate only _batchExistingSkippedFiles (0 converted, all skipped)
+            var skippedField = typeof(MainViewModel).GetField("_batchExistingSkippedFiles", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var skippedList = (System.Collections.Generic.List<string>)skippedField!.GetValue(vm)!;
+
+            // Create temporary files so File.Exists returns true for preloading
+            string temp1 = Path.GetTempFileName();
+            string temp2 = Path.GetTempFileName();
+            try
+            {
+                skippedList.AddRange(new[] { temp1, temp2 });
+
+                // Open batch summary modal
+                vm.ShowBatchSummaryModal(2, 0, TimeSpan.FromSeconds(1), 1024, false, skippedCount: 2);
+
+                Assert.True(vm.HasBatchOutputFiles);
+                Assert.False(vm.HasRecentlyConvertedFiles);
+                Assert.True(vm.CanOpenInCaptureOne);
+                Assert.True(vm.CanOpenOutputFolder);
+
+                System.Collections.Generic.IReadOnlyList<string>? received = null;
+                MainViewModel.PlatformOpenInCaptureOneCallback = files => received = files;
+
+                try
+                {
+                    vm.OpenInCaptureOneCommand.Execute(null);
+
+                    Assert.NotNull(received);
+                    Assert.Equal(2, received.Count);
+                    Assert.Contains(temp1, received);
+                    Assert.Contains(temp2, received);
+                }
+                finally
+                {
+                    MainViewModel.PlatformOpenInCaptureOneCallback = null;
+                }
+            }
+            finally
+            {
+                if (File.Exists(temp1)) File.Delete(temp1);
+                if (File.Exists(temp2)) File.Delete(temp2);
             }
         }
 

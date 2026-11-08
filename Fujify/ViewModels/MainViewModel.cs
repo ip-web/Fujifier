@@ -315,6 +315,12 @@ namespace Fujify.ViewModels
                 OpenInLightroom(_recentlyConvertedDngFiles);
             });
 
+            OpenInCaptureOneCommand = new RelayCommand(() =>
+            {
+                CloseModal();
+                OpenInCaptureOne(GetAllBatchOutputFiles());
+            });
+
             ResolveConflictCommand = new RelayCommand<string>(choiceStr =>
             {
                 if (Enum.TryParse<ConflictChoice>(choiceStr, true, out var choice))
@@ -335,15 +341,24 @@ namespace Fujify.ViewModels
         public static readonly List<string> PendingInitialFiles = new();
         public static Action<string>? PlatformFileCreatedCallback { get; set; }
         public static Action<IReadOnlyList<string>>? PlatformOpenInLightroomCallback { get; set; }
+        public static Action<IReadOnlyList<string>>? PlatformOpenInCaptureOneCallback { get; set; }
         public static Func<Task<IReadOnlyList<string>?>>? PlatformPickPhotosCallback { get; set; }
 
         private readonly List<string> _recentlyConvertedDngFiles = new();
+        private readonly List<string> _batchExistingSkippedFiles = new();
         public IReadOnlyList<string> RecentlyConvertedDngFiles => _recentlyConvertedDngFiles;
+        public IReadOnlyList<string> BatchExistingSkippedFiles => _batchExistingSkippedFiles;
         public bool HasRecentlyConvertedFiles => _recentlyConvertedDngFiles.Count > 0;
+        public bool HasBatchOutputFiles => _recentlyConvertedDngFiles.Count > 0 || _batchExistingSkippedFiles.Count > 0;
         public bool IsOpenInLightroomSupported => OperatingSystem.IsAndroid() || OperatingSystem.IsIOS();
+        public bool IsOpenInCaptureOneSupported => !OperatingSystem.IsAndroid();
+        public bool ShowOpenInLightroom => IsOpenInLightroomSupported && IsLightroomModeSelected;
+        public bool ShowOpenInCaptureOne => IsOpenInCaptureOneSupported && IsCaptureOneModeSelected;
         public bool IsMobile => OperatingSystem.IsAndroid() || OperatingSystem.IsIOS();
-        public bool CanOpenInLightroom => IsOpenInLightroomSupported && HasRecentlyConvertedFiles && (IsBatchSummaryModal || ModalTitle == "Processing completed" || ModalTitle == LocalizationManager.Tr("BatchCompleteTitle"));
-        public bool CanOpenOutputFolder => !OperatingSystem.IsIOS() && !OperatingSystem.IsAndroid() && HasRecentlyConvertedFiles && (ModalTitle == "Processing completed" || IsBatchSummaryModal);
+        public bool CanOpenInLightroom => IsOpenInLightroomSupported && IsLightroomModeSelected && HasRecentlyConvertedFiles && (IsBatchSummaryModal || ModalTitle == "Processing completed" || ModalTitle == LocalizationManager.Tr("BatchCompleteTitle"));
+        public bool CanOpenInCaptureOne => IsOpenInCaptureOneSupported && IsCaptureOneModeSelected && HasBatchOutputFiles && (IsBatchSummaryModal || ModalTitle == "Processing completed" || ModalTitle == LocalizationManager.Tr("BatchCompleteTitle"));
+        public bool CanOpenOutputFolder => !OperatingSystem.IsIOS() && !OperatingSystem.IsAndroid() && HasBatchOutputFiles && (ModalTitle == "Processing completed" || IsBatchSummaryModal);
+        public string OpenOutputFolderButtonClass => CanOpenInCaptureOne ? "secondary" : "primary";
         public bool IsAndroid => OperatingSystem.IsAndroid();
         public bool IsMobileSubtitleVisible => !OperatingSystem.IsAndroid();
         public bool IsSubfolderOptionSupported => true;
@@ -364,6 +379,7 @@ namespace Fujify.ViewModels
         public ICommand DelayToggleKeyCommand { get; }
         public ICommand DelayActivateKeyCommand { get; }
         public ICommand OpenInLightroomCommand { get; }
+        public ICommand OpenInCaptureOneCommand { get; }
         public ICommand InstallLightroomPresetsCommand => Preferences.InstallLightroomPresetsCommand;
         public ICommand ExportLightroomPresetsCommand => Preferences.ExportLightroomPresetsCommand;
         public ICommand ResolveConflictCommand { get; }
@@ -826,6 +842,11 @@ namespace Fujify.ViewModels
                     OnPropertyChanged(nameof(ConversionTargetMode));
                     OnPropertyChanged(nameof(IsLightroomModeSelected));
                     OnPropertyChanged(nameof(IsCaptureOneModeSelected));
+                    OnPropertyChanged(nameof(ShowOpenInCaptureOne));
+                    OnPropertyChanged(nameof(ShowOpenInLightroom));
+                    OnPropertyChanged(nameof(CanOpenInCaptureOne));
+                    OnPropertyChanged(nameof(CanOpenInLightroom));
+                    OnPropertyChanged(nameof(OpenOutputFolderButtonClass));
                     OnPropertyChanged(nameof(ConversionModeSummaryText));
                     OnPropertyChanged(nameof(OutputExtensionBadge));
                     OnPropertyChanged(nameof(SuffixPreview));
@@ -850,6 +871,11 @@ namespace Fujify.ViewModels
             OnPropertyChanged(nameof(IsCaptureOneModeUnlocked));
             OnPropertyChanged(nameof(IsLightroomModeSelected));
             OnPropertyChanged(nameof(IsCaptureOneModeSelected));
+            OnPropertyChanged(nameof(ShowOpenInCaptureOne));
+            OnPropertyChanged(nameof(ShowOpenInLightroom));
+            OnPropertyChanged(nameof(CanOpenInCaptureOne));
+            OnPropertyChanged(nameof(CanOpenInLightroom));
+            OnPropertyChanged(nameof(OpenOutputFolderButtonClass));
             OnPropertyChanged(nameof(ConversionModeSummaryText));
             OnPropertyChanged(nameof(OutputExtensionBadge));
             OnPropertyChanged(nameof(SuffixPreview));
@@ -981,6 +1007,25 @@ namespace Fujify.ViewModels
             }
         }
 
+        public bool AutoOpenInCaptureOne
+        {
+            get => _settingsService.Settings.AutoOpenInCaptureOne;
+            set
+            {
+                if (_settingsService.Settings.AutoOpenInCaptureOne != value)
+                {
+                    _settingsService.Settings.AutoOpenInCaptureOne = value;
+                    _settingsService.Save();
+                    OnPropertyChanged();
+                    if (_preferences != null)
+                    {
+                        _preferences.AutoOpenInCaptureOne = value;
+                    }
+                    OnPropertyChanged(nameof(QuickSettingsSummary));
+                }
+            }
+        }
+
         public bool AutoOpenOutputFolder
         {
             get => _settingsService.Settings.AutoOpenOutputFolder;
@@ -1023,7 +1068,14 @@ namespace Fujify.ViewModels
                 if (AppendSuffix) parts.Add("Suffix");
                 if (IsSubfolderOptionSupported && CreateSubfolder) parts.Add("Subfolder");
                 if (AutoOpenOutputFolder) parts.Add("Open Folder");
-                if (IsOpenInLightroomSupported && AutoOpenInLightroom) parts.Add("Lightroom");
+                if (IsCaptureOneModeSelected)
+                {
+                    if (IsOpenInCaptureOneSupported && AutoOpenInCaptureOne) parts.Add("Capture One");
+                }
+                else
+                {
+                    if (IsOpenInLightroomSupported && AutoOpenInLightroom) parts.Add("Lightroom");
+                }
                 return parts.Count > 0 ? string.Join(" • ", parts) : "Default";
             }
         }
@@ -1287,11 +1339,13 @@ namespace Fujify.ViewModels
                 if (SetProperty(ref _conflictFilePath, value))
                 {
                     OnPropertyChanged(nameof(ConflictFileName));
+                    OnPropertyChanged(nameof(ConflictDirectoryPath));
                 }
             }
         }
 
         public string ConflictFileName => Path.GetFileName(_conflictFilePath);
+        public string ConflictDirectoryPath => !string.IsNullOrEmpty(_conflictFilePath) ? (Path.GetDirectoryName(_conflictFilePath) ?? string.Empty) : string.Empty;
 
         private bool _conflictApplyToAll;
         public bool ConflictApplyToAll
@@ -1360,7 +1414,9 @@ namespace Fujify.ViewModels
                 }
 
                 OnPropertyChanged(nameof(CanOpenInLightroom));
+                OnPropertyChanged(nameof(CanOpenInCaptureOne));
                 OnPropertyChanged(nameof(CanOpenOutputFolder));
+                OnPropertyChanged(nameof(OpenOutputFolderButtonClass));
                 IsModalOpen = true;
             }
 
@@ -1416,27 +1472,56 @@ namespace Fujify.ViewModels
             set => SetProperty(ref _batchSummaryNoticeText, value);
         }
 
-        public void ShowBatchSummaryModal(int totalCount, int successCount, TimeSpan duration, long totalBytes, bool hasErrors)
+        public string BatchSummaryTargetModeText => IsCaptureOneModeSelected ? "Capture One (RAF)" : "Lightroom (DNG)";
+
+        public void ShowBatchSummaryModal(int totalCount, int successCount, TimeSpan duration, long totalBytes, bool hasErrors, int skippedCount = 0)
         {
             void Action()
             {
                 ModalType = "BatchSummary";
                 ModalTitle = LocalizationManager.Tr("BatchCompleteTitle");
 
-                int errorCount = Math.Max(0, totalCount - successCount);
+                int errorCount = Math.Max(0, totalCount - successCount - skippedCount);
 
-                if (errorCount == 0 && !hasErrors)
+                if (skippedCount == totalCount && totalCount > 0)
                 {
-                    BatchSummaryPhotosCountText = LocalizationManager.TrFormat("PhotosConvertedCount", successCount, totalCount);
+                    BatchSummaryPhotosCountText = LocalizationManager.TrFormat("AllPhotosSkipped", totalCount);
+                    BatchSummaryBadgeText = LocalizationManager.Tr("AllPhotosSkippedBadge");
+                    ModalIcon = "ℹ";
+                    ModalIconColor = new SolidColorBrush(Color.Parse("#3498DB"));
+                    ModalBadgeBackground = new SolidColorBrush(Color.FromArgb(40, 52, 152, 219));
+                    BatchSummaryNoticeText = LocalizationManager.Tr("BatchNoticeAllSkipped");
+                }
+                else if (errorCount == 0 && !hasErrors)
+                {
+                    if (skippedCount > 0)
+                    {
+                        BatchSummaryPhotosCountText = LocalizationManager.TrFormat("PhotosConvertedWithSkipped", successCount, totalCount, skippedCount);
+                    }
+                    else
+                    {
+                        BatchSummaryPhotosCountText = LocalizationManager.TrFormat("PhotosConvertedCount", successCount, totalCount);
+                    }
+
                     BatchSummaryBadgeText = LocalizationManager.Tr("AllPhotosConverted");
                     ModalIcon = "✔";
                     ModalIconColor = new SolidColorBrush(Color.Parse("#00C781"));
                     ModalBadgeBackground = new SolidColorBrush(Color.FromArgb(40, 0, 199, 129));
-                    BatchSummaryNoticeText = LocalizationManager.Tr("BatchNoticeSuccess");
+                    BatchSummaryNoticeText = IsCaptureOneModeSelected
+                        ? LocalizationManager.Tr("BatchNoticeRafReady")
+                        : LocalizationManager.Tr("BatchNoticeSuccess");
                 }
                 else
                 {
-                    BatchSummaryPhotosCountText = LocalizationManager.TrFormat("PhotosConvertedWithFailures", successCount, totalCount, errorCount);
+                    if (skippedCount > 0)
+                    {
+                        BatchSummaryPhotosCountText = LocalizationManager.TrFormat("PhotosConvertedWithSkippedAndFailures", successCount, totalCount, skippedCount, errorCount);
+                    }
+                    else
+                    {
+                        BatchSummaryPhotosCountText = LocalizationManager.TrFormat("PhotosConvertedWithFailures", successCount, totalCount, errorCount);
+                    }
+
                     BatchSummaryBadgeText = LocalizationManager.Tr("CompletedWithWarnings");
                     ModalIcon = "⚠";
                     ModalIconColor = new SolidColorBrush(Color.Parse("#E67E22"));
@@ -1465,7 +1550,11 @@ namespace Fujify.ViewModels
                     BatchSummaryVolumeText = $"{(totalBytes / (1024.0 * 1024.0)):F1} MB";
                 }
 
+                OnPropertyChanged(nameof(BatchSummaryTargetModeText));
                 OnPropertyChanged(nameof(CanOpenOutputFolder));
+                OnPropertyChanged(nameof(CanOpenInLightroom));
+                OnPropertyChanged(nameof(CanOpenInCaptureOne));
+                OnPropertyChanged(nameof(OpenOutputFolderButtonClass));
                 IsModalOpen = true;
             }
 
@@ -1862,7 +1951,9 @@ namespace Fujify.ViewModels
             _confirmationTcs?.TrySetResult(false);
             _confirmationTcs = null;
             OnPropertyChanged(nameof(CanOpenInLightroom));
+            OnPropertyChanged(nameof(CanOpenInCaptureOne));
             OnPropertyChanged(nameof(CanOpenOutputFolder));
+            OnPropertyChanged(nameof(OpenOutputFolderButtonClass));
         }
 
         /// <summary>
@@ -1930,15 +2021,45 @@ namespace Fujify.ViewModels
             Dispatcher.UIThread.Post(async () => await AddFilesAsync(filePaths));
         }
 
+        public IReadOnlyList<string> GetAllBatchOutputFiles()
+        {
+            lock (_recentlyConvertedDngFiles)
+            {
+                var list = new List<string>(_recentlyConvertedDngFiles);
+                foreach (var f in _batchExistingSkippedFiles)
+                {
+                    if (!list.Contains(f, StringComparer.OrdinalIgnoreCase) && File.Exists(f))
+                    {
+                        list.Add(f);
+                    }
+                }
+                return list;
+            }
+        }
+
         public void OpenInLightroom(IReadOnlyList<string>? files = null)
         {
-            var targetFiles = files ?? _recentlyConvertedDngFiles;
+            var targetFiles = files ?? GetAllBatchOutputFiles();
             if (targetFiles == null || targetFiles.Count == 0) return;
 
             if (PlatformOpenInLightroomCallback != null)
             {
                 PlatformOpenInLightroomCallback(targetFiles);
             }
+        }
+
+        public void OpenInCaptureOne(IReadOnlyList<string>? files = null)
+        {
+            var targetFiles = files ?? GetAllBatchOutputFiles();
+            if (targetFiles == null || targetFiles.Count == 0) return;
+
+            if (PlatformOpenInCaptureOneCallback != null)
+            {
+                PlatformOpenInCaptureOneCallback(targetFiles);
+                return;
+            }
+
+            CrossPlatformLauncher.OpenInCaptureOne(targetFiles);
         }
 
         public string? OutputFolderPath
@@ -2523,10 +2644,14 @@ namespace Fujify.ViewModels
             lock (_recentlyConvertedDngFiles)
             {
                 _recentlyConvertedDngFiles.Clear();
+                _batchExistingSkippedFiles.Clear();
             }
             OnPropertyChanged(nameof(HasRecentlyConvertedFiles));
+            OnPropertyChanged(nameof(HasBatchOutputFiles));
             OnPropertyChanged(nameof(CanOpenInLightroom));
+            OnPropertyChanged(nameof(CanOpenInCaptureOne));
             OnPropertyChanged(nameof(CanOpenOutputFolder));
+            OnPropertyChanged(nameof(OpenOutputFolderButtonClass));
 
             bool createBackup = IsMobile || CreateBackup;
             string? currentOutputFolder = IsMobile ? null : OutputFolderPath;
@@ -2540,6 +2665,7 @@ namespace Fujify.ViewModels
                 _licenseService.IsPro);
             int processedCount = 0;
             int successCount = 0;
+            int skippedCount = 0;
 
             var batchStopwatch = System.Diagnostics.Stopwatch.StartNew();
             long totalBytes = 0;
@@ -2580,7 +2706,7 @@ namespace Fujify.ViewModels
 
                     try
                     {
-                        await ProcessSingleFileAsync(
+                        bool converted = await ProcessSingleFileAsync(
                             filePath,
                             createBackup,
                             currentOutputFolder,
@@ -2589,7 +2715,14 @@ namespace Fujify.ViewModels
                             choice => batchConflictChoice = choice,
                             reservedOutputPaths,
                             ct);
-                        Interlocked.Increment(ref successCount);
+                        if (converted)
+                        {
+                            Interlocked.Increment(ref successCount);
+                        }
+                        else
+                        {
+                            Interlocked.Increment(ref skippedCount);
+                        }
                     }
                     catch (OperationCanceledException)
                     {
@@ -2682,17 +2815,6 @@ namespace Fujify.ViewModels
                     ? "Processing completed with some errors. Please check the status for details."
                     : "Enjoy your new Film simulations!";
 
-                List<string> convertedToOpen;
-                lock (_recentlyConvertedDngFiles)
-                {
-                    convertedToOpen = _recentlyConvertedDngFiles.ToList();
-                }
-
-                if (IsOpenInLightroomSupported && _settingsService.Settings.AutoOpenInLightroom && convertedToOpen.Count > 0)
-                {
-                    OpenInLightroom(convertedToOpen);
-                }
-
                 batchStopwatch.Stop();
 
                 if (failedEntries.Count > 0)
@@ -2740,7 +2862,34 @@ namespace Fujify.ViewModels
                     ExecuteOpenOutputFolder();
                 }
 
-                ShowBatchSummaryModal(totalFiles, successCount, batchStopwatch.Elapsed, totalBytes, hasProcessingErrors);
+                ShowBatchSummaryModal(totalFiles, successCount, batchStopwatch.Elapsed, totalBytes, hasProcessingErrors, skippedCount);
+
+                void TriggerAutoOpen()
+                {
+                    if (IsCaptureOneModeSelected)
+                    {
+                        if (IsOpenInCaptureOneSupported && _settingsService.Settings.AutoOpenInCaptureOne && HasBatchOutputFiles)
+                        {
+                            OpenInCaptureOneCommand.Execute(null);
+                        }
+                    }
+                    else
+                    {
+                        if (IsOpenInLightroomSupported && _settingsService.Settings.AutoOpenInLightroom && HasBatchOutputFiles)
+                        {
+                            OpenInLightroomCommand.Execute(null);
+                        }
+                    }
+                }
+
+                if (Avalonia.Application.Current == null || Dispatcher.UIThread.CheckAccess())
+                {
+                    TriggerAutoOpen();
+                }
+                else
+                {
+                    Dispatcher.UIThread.Post(TriggerAutoOpen);
+                }
 
                 if (!_licenseService.IsPro)
                 {
@@ -2755,9 +2904,10 @@ namespace Fujify.ViewModels
             string folder = string.Empty;
             lock (_recentlyConvertedDngFiles)
             {
-                if (_recentlyConvertedDngFiles.Count > 0)
+                var sample = _recentlyConvertedDngFiles.FirstOrDefault() ?? _batchExistingSkippedFiles.FirstOrDefault();
+                if (!string.IsNullOrEmpty(sample))
                 {
-                    var dir = Path.GetDirectoryName(_recentlyConvertedDngFiles[0]);
+                    var dir = Path.GetDirectoryName(sample);
                     if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
                     {
                         folder = dir;
@@ -2841,7 +2991,7 @@ namespace Fujify.ViewModels
             return newFilePath;
         }
 
-        private async Task ProcessSingleFileAsync(
+        private async Task<bool> ProcessSingleFileAsync(
             string filePath,
             bool createBackup,
             string? outputFolder,
@@ -2927,7 +3077,11 @@ namespace Fujify.ViewModels
                 if (choice == ConflictChoice.Skip)
                 {
                     UpdateFileStatus(filePath, "Skipped (Exists)");
-                    return;
+                    lock (_recentlyConvertedDngFiles)
+                    {
+                        _batchExistingSkippedFiles.Add(initialDestFilePath);
+                    }
+                    return false;
                 }
                 else if (choice == ConflictChoice.UseUniqueName)
                 {
@@ -3002,7 +3156,7 @@ namespace Fujify.ViewModels
                         _recentlyConvertedDngFiles.Add(finalDestFilePath);
                     }
                     PlatformFileCreatedCallback?.Invoke(finalDestFilePath);
-                    return;
+                    return true;
                 }
 
                 string? containerPath = _settingsService.Settings.RafContainerPath;
@@ -3052,7 +3206,7 @@ namespace Fujify.ViewModels
                     _recentlyConvertedDngFiles.Add(finalDestFilePath);
                 }
                 PlatformFileCreatedCallback?.Invoke(finalDestFilePath);
-                return;
+                return true;
             }
 
             string? dngFilePath = filePath;
@@ -3181,6 +3335,7 @@ namespace Fujify.ViewModels
                         _recentlyConvertedDngFiles.Add(finalDestFilePath);
                     }
                     PlatformFileCreatedCallback?.Invoke(finalDestFilePath);
+                    return true;
                 }
                 else
                 {

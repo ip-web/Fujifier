@@ -83,6 +83,9 @@ public class AppDelegate : AvaloniaAppDelegate<App>
         // Wire Open in Lightroom handler using native iOS share sheet & activity view controller
         MainViewModel.PlatformOpenInLightroomCallback = OpenInLightroom;
 
+        // Wire Open in Capture One handler using native iOS share sheet & activity view controller
+        MainViewModel.PlatformOpenInCaptureOneCallback = OpenInCaptureOne;
+
         // Wire native iOS photo gallery picker (PHPickerViewController)
         MainViewModel.PlatformPickPhotosCallback = PickPhotosAsync;
 
@@ -461,6 +464,46 @@ public class AppDelegate : AvaloniaAppDelegate<App>
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[Fujify iOS] Error opening files in Lightroom: {ex}");
+        }
+    }
+
+    private void OpenInCaptureOne(IReadOnlyList<string> targetFiles)
+    {
+        if (targetFiles == null || targetFiles.Count == 0) return;
+
+        try
+        {
+            var fileUrls = targetFiles
+                .Where(File.Exists)
+                .Select(p => (NSObject)NSUrl.FromFilename(p))
+                .ToArray();
+
+            if (fileUrls.Length == 0) return;
+
+            UIApplication.SharedApplication.BeginInvokeOnMainThread(() =>
+            {
+                var topController = GetTopViewController();
+                if (topController == null) return;
+
+                var activityController = new UIActivityViewController(fileUrls, null);
+
+                // Configure iPad popover presentation to avoid crash
+                if (activityController.PopoverPresentationController != null && topController.View != null)
+                {
+                    activityController.PopoverPresentationController.SourceView = topController.View;
+                    activityController.PopoverPresentationController.SourceRect = new CoreGraphics.CGRect(
+                        topController.View.Bounds.GetMidX(),
+                        topController.View.Bounds.GetMidY(),
+                        0, 0);
+                    activityController.PopoverPresentationController.PermittedArrowDirections = 0;
+                }
+
+                topController.PresentViewController(activityController, true, null);
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Fujify iOS] Error opening files in Capture One: {ex}");
         }
     }
 

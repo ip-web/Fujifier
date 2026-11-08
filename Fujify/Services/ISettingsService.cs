@@ -83,6 +83,7 @@ namespace Fujify.Services
         public bool EnableCaptureOneMode { get; set; } = false;
         public string? RafContainerPath { get; set; }
         public string ConversionTargetMode { get; set; } = "Lightroom"; // "Lightroom" (DNG) or "CaptureOne" (RAF)
+        public bool AutoOpenInCaptureOne { get; set; } = false;
     }
 
     public interface ISettingsService

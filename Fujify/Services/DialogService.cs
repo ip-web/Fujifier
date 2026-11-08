@@ -21,6 +21,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -292,6 +293,8 @@ namespace Fujify.Services
             }
         }
 
+        private readonly SemaphoreSlim _conflictDialogLock = new(1, 1);
+
         public async Task<FileConflictResolution> PromptFileConflictAsync(Window? owner, string destinationFilePath)
         {
             if (Application.Current == null) return new FileConflictResolution(ConflictChoice.Skip, false);
@@ -306,22 +309,31 @@ namespace Fujify.Services
                 return new FileConflictResolution(ConflictChoice.Skip, false);
             }
 
-            if (!Dispatcher.UIThread.CheckAccess())
+            await _conflictDialogLock.WaitAsync();
+            try
             {
-                try
+                if (!Dispatcher.UIThread.CheckAccess())
                 {
-                    var task = Dispatcher.UIThread.InvokeAsync(() => PromptFileConflictAsync(owner, destinationFilePath));
-                    var completed = await Task.WhenAny(task, Task.Delay(5000));
-                    if (completed == task)
-                    {
-                        return await task;
-                    }
-                    return new FileConflictResolution(ConflictChoice.Skip, false);
+                    return await Dispatcher.UIThread.InvokeAsync(() => PromptFileConflictCoreAsync(owner, destinationFilePath));
                 }
-                catch
-                {
-                    return new FileConflictResolution(ConflictChoice.Skip, false);
-                }
+
+                return await PromptFileConflictCoreAsync(owner, destinationFilePath);
+            }
+            finally
+            {
+                _conflictDialogLock.Release();
+            }
+        }
+
+        private async Task<FileConflictResolution> PromptFileConflictCoreAsync(Window? owner, string destinationFilePath)
+        {
+            var desktopLifetime = Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
+            var singleViewLifetime = Application.Current?.ApplicationLifetime as ISingleViewApplicationLifetime;
+            var targetOwner = owner ?? desktopLifetime?.MainWindow;
+
+            if (targetOwner == null && singleViewLifetime?.MainView == null)
+            {
+                return new FileConflictResolution(ConflictChoice.Skip, false);
             }
 
             if (IsMobileOrSingleView || targetOwner == null)

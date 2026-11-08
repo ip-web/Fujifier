@@ -213,6 +213,77 @@ namespace Fujify.Tests
         }
 
         [Fact]
+        public void ShowBatchSummaryModal_WithSkippedFiles_ShowsSkippedCount()
+        {
+            var vm = new MainViewModel();
+
+            TimeSpan duration = TimeSpan.FromSeconds(10.0);
+            long bytes = 50 * 1024 * 1024; // 50 MB
+
+            vm.ShowBatchSummaryModal(totalCount: 10, successCount: 8, duration: duration, totalBytes: bytes, hasErrors: false, skippedCount: 2);
+
+            Assert.True(vm.IsBatchSummaryModal);
+            Assert.True(vm.IsBottomSheetOpen);
+            Assert.Equal("8 of 10 photos converted (2 skipped)", vm.BatchSummaryPhotosCountText);
+            Assert.Equal("✔ All Photos Converted", vm.BatchSummaryBadgeText);
+            Assert.Equal("✔", vm.ModalIcon);
+        }
+
+        [Fact]
+        public void ShowBatchSummaryModal_AllSkipped_ShowsAllSkippedMessageAndBadge()
+        {
+            var vm = new MainViewModel();
+
+            TimeSpan duration = TimeSpan.FromSeconds(2.0);
+            long bytes = 10 * 1024 * 1024;
+
+            vm.ShowBatchSummaryModal(totalCount: 5, successCount: 0, duration: duration, totalBytes: bytes, hasErrors: false, skippedCount: 5);
+
+            Assert.True(vm.IsBatchSummaryModal);
+            Assert.True(vm.IsBottomSheetOpen);
+            Assert.Equal("5 of 5 photos skipped (already exist)", vm.BatchSummaryPhotosCountText);
+            Assert.Equal("ℹ All Photos Skipped", vm.BatchSummaryBadgeText);
+            Assert.Equal("ℹ", vm.ModalIcon);
+            Assert.Equal("Existing destination files preserved. No files were overwritten.", vm.BatchSummaryNoticeText);
+        }
+
+        [Fact]
+        public void ShowBatchSummaryModal_WithSkippedAndErrors_ShowsBothCounts()
+        {
+            var vm = new MainViewModel();
+
+            TimeSpan duration = TimeSpan.FromSeconds(30.0);
+            long bytes = 100 * 1024 * 1024;
+
+            vm.ShowBatchSummaryModal(totalCount: 10, successCount: 7, duration: duration, totalBytes: bytes, hasErrors: true, skippedCount: 2);
+
+            Assert.True(vm.IsBatchSummaryModal);
+            Assert.True(vm.IsBottomSheetOpen);
+            Assert.Equal("7 of 10 photos converted (2 skipped, 1 failed)", vm.BatchSummaryPhotosCountText);
+            Assert.Equal("⚠ Completed with Warnings", vm.BatchSummaryBadgeText);
+            Assert.Equal("⚠", vm.ModalIcon);
+        }
+
+        [Fact]
+        public void BatchSummaryTargetModeText_ReturnsTargetModeText()
+        {
+            var mockSettings = new MockSettingsService();
+            mockSettings.Settings.EnableCaptureOneMode = true;
+            mockSettings.Settings.ConversionTargetMode = "Lightroom";
+
+            var vm = new MainViewModel(settingsService: mockSettings);
+
+            // Default mode is Lightroom (DNG)
+            Assert.False(vm.IsCaptureOneModeSelected);
+            Assert.Equal("Lightroom (DNG)", vm.BatchSummaryTargetModeText);
+
+            // Switch to Capture One mode
+            vm.SelectCaptureOneModeCommand.Execute(null);
+            Assert.True(vm.IsCaptureOneModeSelected);
+            Assert.Equal("Capture One (RAF)", vm.BatchSummaryTargetModeText);
+        }
+
+        [Fact]
         public void ClearQueueAndCloseModal_ClosesModalAndClearsQueue()
         {
             var vm = new MainViewModel();

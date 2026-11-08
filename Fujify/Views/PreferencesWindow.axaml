@@ -326,6 +326,19 @@
                                     <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoOpenInLightroom}" OnContent="" OffContent=""/>
                                 </Grid>
 
+                                <Separator Height="1" Background="{DynamicResource AppEdgeBrush}" IsVisible="{Binding ShowOpenInCaptureOne}"/>
+
+                                <!-- Auto-open in Capture One -->
+                                <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding ShowOpenInCaptureOne}">
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2" Margin="0,0,12,0">
+                                        <TextBlock Text="{loc:Loc AutoOpenInCaptureOne}" FontWeight="SemiBold" FontSize="12"
+                                                   Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                        <TextBlock Text="{loc:Loc AutoOpenInCaptureOneDesc}" FontSize="11"
+                                                   Foreground="{DynamicResource AppTextSecondaryBrush}" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoOpenInCaptureOne}" OnContent="" OffContent=""/>
+                                </Grid>
+
                                 <Separator Height="1" Background="{DynamicResource AppEdgeBrush}"/>
 
                                 <!-- Export Failed Conversions Log -->
@@ -566,6 +579,22 @@
                                                        TextWrapping="Wrap" LineHeight="16"/>
                                         </Border>
                                     </StackPanel>
+                                </Border>
+
+                                <!-- Auto-open in Capture One (Visible when enabled & supported) -->
+                                <Border IsVisible="{Binding ShowOpenInCaptureOne}"
+                                        Background="{DynamicResource AppSurfaceBrush}"
+                                        BorderBrush="{DynamicResource AppEdgeBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        Padding="14,12">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2" Margin="0,0,12,0">
+                                            <TextBlock Text="{loc:Loc AutoOpenInCaptureOne}" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                            <TextBlock Text="{loc:Loc AutoOpenInCaptureOneDesc}" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoOpenInCaptureOne, Mode=TwoWay}" VerticalAlignment="Center"/>
+                                    </Grid>
                                 </Border>
                             </StackPanel>
                         </Grid>

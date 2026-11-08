@@ -52,6 +52,7 @@ namespace Fujify.ViewModels
         private bool _losslessCompression = true;
         private int _maxConcurrentConversions;
         private bool _autoOpenInLightroom;
+        private bool _autoOpenInCaptureOne;
         private bool _appendSuffix;
         private string _suffix = "-fujified";
         private bool _createSubfolder;
@@ -285,6 +286,7 @@ namespace Fujify.ViewModels
                     _settingsService.Settings.EnableCaptureOneMode = value;
                     _settingsService.Save();
                     OnPropertyChanged(nameof(ShowCaptureOneContainerSettings));
+                    OnPropertyChanged(nameof(ShowOpenInCaptureOne));
                     if (MainViewModel.Instance != null)
                     {
                         MainViewModel.Instance.RefreshCaptureOneModeState();
@@ -294,6 +296,7 @@ namespace Fujify.ViewModels
         }
 
         public bool ShowCaptureOneContainerSettings => EnableCaptureOneMode;
+        public bool ShowOpenInCaptureOne => IsOpenInCaptureOneSupported && EnableCaptureOneMode;
 
         public ObservableCollection<RafContainerItemViewModel> RafContainers { get; } = new();
         public bool HasRafContainers => RafContainers.Count > 0;
@@ -617,10 +620,18 @@ namespace Fujify.ViewModels
             set => SetProperty(ref _embedOriginalRaw, value);
         }
 
+        public bool IsOpenInCaptureOneSupported => !OperatingSystem.IsAndroid();
+
         public bool AutoOpenInLightroom
         {
             get => _autoOpenInLightroom;
             set => SetProperty(ref _autoOpenInLightroom, value);
+        }
+
+        public bool AutoOpenInCaptureOne
+        {
+            get => _autoOpenInCaptureOne;
+            set => SetProperty(ref _autoOpenInCaptureOne, value);
         }
 
         public bool ExportFailedConversionsLog
@@ -851,6 +862,7 @@ namespace Fujify.ViewModels
             _embedOriginalRaw = settings.EmbedOriginalRaw;
             _skipThumbnailGeneration = settings.SkipThumbnailGeneration;
             _autoOpenInLightroom = settings.AutoOpenInLightroom;
+            _autoOpenInCaptureOne = settings.AutoOpenInCaptureOne;
             _losslessCompression = settings.LosslessCompression;
             _appendSuffix = settings.AppendSuffix;
             _suffix = string.IsNullOrWhiteSpace(settings.Suffix) ? "-fujified" : settings.Suffix;
@@ -1236,6 +1248,7 @@ namespace Fujify.ViewModels
             s.LosslessCompression = _licenseService.IsPro && _losslessCompression;
             s.MaxConcurrentConversions = _licenseService.IsPro ? _maxConcurrentConversions : 1;
             s.AutoOpenInLightroom = _autoOpenInLightroom;
+            s.AutoOpenInCaptureOne = _autoOpenInCaptureOne;
             s.AppendSuffix = _appendSuffix;
             s.Suffix = string.IsNullOrWhiteSpace(_suffix) ? "-fujified" : _suffix.Trim();
             s.CreateSubfolder = IsSubfolderOptionSupported && _createSubfolder;
@@ -1285,6 +1298,7 @@ namespace Fujify.ViewModels
             _embedOriginalRaw = settings.EmbedOriginalRaw;
             _skipThumbnailGeneration = settings.SkipThumbnailGeneration;
             _autoOpenInLightroom = settings.AutoOpenInLightroom;
+            _autoOpenInCaptureOne = settings.AutoOpenInCaptureOne;
             _losslessCompression = settings.LosslessCompression;
             _appendSuffix = settings.AppendSuffix;
             _suffix = string.IsNullOrWhiteSpace(settings.Suffix) ? "-fujified" : settings.Suffix;
