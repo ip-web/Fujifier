@@ -38,13 +38,18 @@ Unlock the full palette of modern Fujifilm camera profiles (based on the flagshi
 - **Color Profiles**: PROVIA / Standard, Velvia / Vivid, ASTIA / Soft, CLASSIC CHROME, PRO Neg. Hi, PRO Neg. Std, Classic Neg., Nostalgic Neg., ETERNA / Cinema, ETERNA BLEACH BYPASS, REALA ACE.
 - **Monochrome Profiles**: ACROS (Standard, +Ye, +R, +G), MONOCHROME (Standard, +Ye, +R, +G), SEPIA.
 
+### 🎯 Dual Workflow Support: Adobe Lightroom (DNG) & Capture One (RAF)
+Switch seamlessly between develop targets directly in the app:
+- **Lightroom Mode (`.DNG`)**: Calibrated DNG output with embedded metadata and color matrix parameters recognized natively by Adobe Lightroom and Adobe Camera Raw.
+- **Capture One Mode (`.RAF`)**: Advanced in-process donor container repacking via `raw2raf_ffi`. Converts any non-Fujifilm camera RAW directly into a genuine Fujifilm `.RAF` file, unlocking Fujifilm Film Simulations natively inside Capture One Pro and Capture One Mobile! Supports automatic container selection and multiple Bayer donor profiles (GFX, X-A series, X-T100/200, XF10).
+
 ### 🌐 Universal Multiplatform Support
 Fujifier runs natively across desktop and mobile devices:
 - **Windows**: Native desktop app (x64 and ARM64) with seamless Windows Explorer right-click context menu integration (`Open With` & batch queueing).
 - **macOS**: Universal Apple Silicon (M1/M2/M3/M4) and Intel binaries with native macOS titlebar, drag-and-drop, and system integrations.
 - **Linux**: Full graphical desktop application and a standalone **Headless Command-Line Interface (CLI)** for terminal users, automated shell scripts, and headless servers.
-- **Android**: Modern responsive touch interface, Material UI, back gesture navigation, background photo scanning, and Google Drive/local storage photo pickers.
-- **iOS**: iPhone and iPad native app with Apple Photos picker and 1-tap Adobe Lightroom Mobile handoff.
+- **Android**: Modern responsive touch interface, Material UI, back gesture navigation, background photo scanning, Google Drive/local storage photo pickers, and native `raw2raf_ffi` acceleration.
+- **iOS**: iPhone and iPad native app with Apple Photos picker, persistent container management, 1-tap Adobe Lightroom Mobile & Capture One Mobile export handoffs.
 
 ### 📦 1-Click Lightroom Develop Presets
 - **Automatic Desktop Installation**: Installs all 20 develop presets with one click directly into your local Adobe Lightroom Classic and Adobe Camera Raw folder.
@@ -52,13 +57,14 @@ Fujifier runs natively across desktop and mobile devices:
 
 ### ⚡ High-Performance Multi-threaded Engine
 - Satures multi-core CPUs with configurable worker concurrency, balancing Performance cores (P-cores) and Efficiency cores (E-cores).
+- In-process native Rust FFI libraries (`dnglab_ffi` & `raw2raf_ffi`) for maximum execution speed without launching external CLI subprocesses.
 - Instant photo loading and fast batch rendering.
 
 ### 🗜️ Lossless DNG Compression
 - Compress converted DNG files with lossless compression algorithms to save storage space without losing a single bit of image data or dynamic range.
 
-### 🌍 Multilingual
-- Runtime localization with on-the-fly language switching between **English**, **French (Français)**, **Spanish (Español)**, and **German (Deutsch)**.
+### 🌍 Global Multilingual Support (12 Languages)
+- Dynamic runtime language switching between **English**, **Français**, **Español**, **Deutsch**, **Italiano**, **日本語 (Japanese)**, **中文 (Simplified Chinese)**, **Português**, **한국어 (Korean)**, **Nederlands**, **Русский (Russian)**, and **Polski**.
 
 ---
 
@@ -177,7 +183,12 @@ To convert your Nikon shots with Fujifier, configure your camera to shoot in **L
 <details>
 <summary><strong>Q: Does this work with Capture One or other RAW editors?</strong></summary>
 
-Currently, authentic camera profile emulation relies on Adobe's Lightroom & Camera Raw color profiling engine. While converted DNG files are standard DNGs readable by any software, the Fujifilm film simulation profiles themselves are designed for Adobe Lightroom Classic, Adobe Lightroom, and Adobe Camera Raw.
+**Yes! Starting in v2.1.0, Fujifier features full native Capture One integration.**
+
+By switching to **Capture One Mode** in Fujifier:
+- Fujifier converts your RAW photos into genuine Fujifilm `.RAF` files using a reference Bayer donor RAF container (such as GFX 50S II, X-A series, X-T100, X-T200, or XF10).
+- When opened in Capture One Pro (or Capture One Mobile on iOS/iPadOS), Capture One identifies the camera as a native Fujifilm camera and unlocks the full **Fujifilm Film Simulation** drop-down menu in the Base Characteristics tool!
+- On desktop and mobile, you can even tap **"Open in Capture One"** right from the batch summary to hand off your converted photos instantly.
 </details>
 
 <details>

@@ -5,8 +5,8 @@
     <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
     <ApplicationTitle>Fujifier</ApplicationTitle>
     <ApplicationId>com.ipweb.fujifier</ApplicationId>
-    <ApplicationVersion>1</ApplicationVersion>
-    <ApplicationDisplayVersion>2.0.0</ApplicationDisplayVersion>
+    <ApplicationVersion>2</ApplicationVersion>
+    <ApplicationDisplayVersion>2.1.0</ApplicationDisplayVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <EnableCodeSigning>false</EnableCodeSigning>
