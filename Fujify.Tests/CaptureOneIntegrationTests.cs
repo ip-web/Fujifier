@@ -461,6 +461,32 @@ namespace Fujify.Tests
         }
 
         [Fact]
+        public void RafConverterService_PersistentContainerFallback_ResolvesMovedOrDeletedTempPath()
+        {
+            var service = new RafConverterService(new MockProcessRunner());
+            string containerDir = RafConverterService.GetContainersDirectory();
+            string persistentRaf = Path.Combine(containerDir, $"test_persistent_{Guid.NewGuid():N}.raf");
+
+            try
+            {
+                File.WriteAllText(persistentRaf, "persistent raf test");
+
+                // Simulate temporary staging path that was deleted by OS
+                string deletedTempPath = Path.Combine(Path.GetTempPath(), Path.GetFileName(persistentRaf));
+                if (File.Exists(deletedTempPath)) File.Delete(deletedTempPath);
+
+                // Validation and resolution should find the file in GetContainersDirectory()
+                Assert.True(service.HasValidContainer(deletedTempPath));
+                string resolved = service.ResolveContainerArgument(deletedTempPath);
+                Assert.Equal(persistentRaf, resolved);
+            }
+            finally
+            {
+                if (File.Exists(persistentRaf)) File.Delete(persistentRaf);
+            }
+        }
+
+        [Fact]
         public void RafMetadataModifier_InjectMetadata_TransfersMetadataFromRawToRaf()
         {
             string containerRaf = Path.GetFullPath(@"..\..\..\..\test_files\Fujifilm-X-T4.RAF");

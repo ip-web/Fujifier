@@ -1704,12 +1704,35 @@ namespace Fujify.ViewModels
         {
             RafContainers.Remove(item);
             SyncContainersToSetting();
+            try
+            {
+                // If the container was stored in the dedicated persistent storage, clean it up
+                string containerDir = RafConverterService.GetContainersDirectory();
+                if (item.FilePath.StartsWith(containerDir, StringComparison.OrdinalIgnoreCase) && File.Exists(item.FilePath))
+                {
+                    File.Delete(item.FilePath);
+                }
+            }
+            catch { }
         }
 
         private void ClearAllContainers()
         {
+            var oldItems = RafContainers.ToList();
             RafContainers.Clear();
             SyncContainersToSetting();
+            try
+            {
+                string containerDir = RafConverterService.GetContainersDirectory();
+                foreach (var item in oldItems)
+                {
+                    if (item.FilePath.StartsWith(containerDir, StringComparison.OrdinalIgnoreCase) && File.Exists(item.FilePath))
+                    {
+                        File.Delete(item.FilePath);
+                    }
+                }
+            }
+            catch { }
         }
 
         private void SyncContainersToSetting()
@@ -1787,7 +1810,26 @@ namespace Fujify.ViewModels
                     continue;
                 }
 
-                if (RafContainers.Any(c => string.Equals(c.FilePath, cleanPath, StringComparison.OrdinalIgnoreCase)))
+                // Ensure reference container is copied into persistent application storage
+                // so it survives temp folder cleanups and sandbox file provider expiration (critical for iOS & Android)
+                string persistentPath = cleanPath;
+                try
+                {
+                    string containerDir = RafConverterService.GetContainersDirectory();
+                    string destFile = Path.Combine(containerDir, Path.GetFileName(cleanPath));
+                    if (!string.Equals(Path.GetFullPath(cleanPath), Path.GetFullPath(destFile), StringComparison.OrdinalIgnoreCase))
+                    {
+                        File.Copy(cleanPath, destFile, overwrite: true);
+                        persistentPath = destFile;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[PreferencesViewModel] Failed to copy container to persistent storage: {ex.Message}");
+                }
+
+                if (RafContainers.Any(c => string.Equals(c.FilePath, persistentPath, StringComparison.OrdinalIgnoreCase) ||
+                                           string.Equals(c.FilePath, cleanPath, StringComparison.OrdinalIgnoreCase)))
                 {
                     continue;
                 }
@@ -1796,9 +1838,9 @@ namespace Fujify.ViewModels
                     ? (inspection.Width > 0 && inspection.Height > 0
                         ? $"{inspection.CameraModel} ({inspection.Width} × {inspection.Height})"
                         : inspection.CameraModel)
-                    : (RawMetadataReader.TryGetCameraMakeAndModel(cleanPath) ?? "Fujifilm Bayer");
+                    : (RawMetadataReader.TryGetCameraMakeAndModel(persistentPath) ?? "Fujifilm Bayer");
 
-                RafContainers.Add(new RafContainerItemViewModel(cleanPath, cameraDisplay, RemoveContainerItem));
+                RafContainers.Add(new RafContainerItemViewModel(persistentPath, cameraDisplay, RemoveContainerItem));
                 addedCount++;
             }
 

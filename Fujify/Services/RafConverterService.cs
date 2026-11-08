@@ -20,6 +20,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -44,7 +45,8 @@ namespace Fujify.Services
 
         public RafConversionResult ConvertToRaf(string inputRawPath, string outputRafPath, string containerArg, string? exiftoolPath = null)
         {
-            if (string.IsNullOrWhiteSpace(containerArg))
+            string resolvedContainers = ResolveContainerArgumentStatic(containerArg);
+            if (string.IsNullOrWhiteSpace(resolvedContainers))
             {
                 return new RafConversionResult(false, null, "No reference Fujifilm RAF container provided. Please configure a reference RAF file or folder in Settings.");
             }
@@ -57,7 +59,7 @@ namespace Fujify.Services
                     var (nativeSuccess, nativeError) = Raw2RafNative.ConvertFile(
                         inputRawPath,
                         outputRafPath,
-                        containerArg,
+                        resolvedContainers,
                         "GFX50S II",
                         autoContainer: true);
 
@@ -93,7 +95,7 @@ namespace Fujify.Services
 
             try
             {
-                string arguments = BuildArguments(inputRawPath, outputRafPath, containerArg, exiftoolPath);
+                string arguments = BuildArguments(inputRawPath, outputRafPath, resolvedContainers, exiftoolPath);
                 var (exitCode, output, error) = _processRunner.Run(raw2RafPath, arguments);
 
                 if (exitCode != 0 || output.Contains("[ERROR]", StringComparison.OrdinalIgnoreCase) || !File.Exists(outputRafPath))
@@ -115,7 +117,8 @@ namespace Fujify.Services
 
         public async Task<RafConversionResult> ConvertToRafAsync(string inputRawPath, string outputRafPath, string containerArg, string? exiftoolPath = null, CancellationToken cancellationToken = default)
         {
-            if (string.IsNullOrWhiteSpace(containerArg))
+            string resolvedContainers = ResolveContainerArgumentStatic(containerArg);
+            if (string.IsNullOrWhiteSpace(resolvedContainers))
             {
                 return new RafConversionResult(false, null, "No reference Fujifilm RAF container provided. Please configure a reference RAF file or folder in Settings.");
             }
@@ -130,7 +133,7 @@ namespace Fujify.Services
                         Raw2RafNative.ConvertFile(
                             inputRawPath,
                             outputRafPath,
-                            containerArg,
+                            resolvedContainers,
                             "GFX50S II",
                             autoContainer: true),
                         cancellationToken);
@@ -171,7 +174,7 @@ namespace Fujify.Services
 
             try
             {
-                string arguments = BuildArguments(inputRawPath, outputRafPath, containerArg, exiftoolPath);
+                string arguments = BuildArguments(inputRawPath, outputRafPath, resolvedContainers, exiftoolPath);
                 var (exitCode, output, error) = await _processRunner.RunAsync(raw2RafPath, arguments, cancellationToken);
 
                 if (exitCode != 0 || output.Contains("[ERROR]", StringComparison.OrdinalIgnoreCase) || !File.Exists(outputRafPath))
@@ -195,6 +198,36 @@ namespace Fujify.Services
             }
         }
 
+        public static string GetContainersDirectory()
+        {
+            try
+            {
+                string baseDir = OperatingSystem.IsIOS() || OperatingSystem.IsAndroid()
+                    ? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
+                    : Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
+                if (string.IsNullOrWhiteSpace(baseDir) || !Directory.Exists(baseDir))
+                {
+                    baseDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                }
+
+                if (string.IsNullOrWhiteSpace(baseDir) || !Directory.Exists(baseDir))
+                {
+                    baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                }
+
+                string containerDir = Path.Combine(baseDir, "Fujifier", "Containers");
+                Directory.CreateDirectory(containerDir);
+                return containerDir;
+            }
+            catch
+            {
+                string fallback = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Fujifier_Containers");
+                try { Directory.CreateDirectory(fallback); } catch { }
+                return fallback;
+            }
+        }
+
         public bool HasValidContainer(string? containerArg)
         {
             return HasValidContainerStatic(containerArg);
@@ -203,19 +236,112 @@ namespace Fujify.Services
         public static bool HasValidContainerStatic(string? containerArg)
         {
             if (string.IsNullOrWhiteSpace(containerArg))
+            {
+                // Check if any containers exist in the persistent containers directory
+                try
+                {
+                    string containerDir = GetContainersDirectory();
+                    if (Directory.Exists(containerDir))
+                    {
+                        return Directory.GetFiles(containerDir, "*.*", SearchOption.TopDirectoryOnly)
+                            .Any(f => f.EndsWith(".raf", StringComparison.OrdinalIgnoreCase));
+                    }
+                }
+                catch { }
                 return false;
+            }
 
             var parts = containerArg.Split(new[] { ';', '|', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             foreach (var rawPart in parts)
             {
                 string part = rawPart.Trim('\"', '\'', ' ');
-                if (!string.IsNullOrWhiteSpace(part) && (File.Exists(part) || Directory.Exists(part)))
+                if (string.IsNullOrWhiteSpace(part)) continue;
+
+                if (File.Exists(part) || Directory.Exists(part))
                 {
                     return true;
+                }
+
+                // Check persistent storage fallback for this filename
+                string fileName = Path.GetFileName(part);
+                if (!string.IsNullOrWhiteSpace(fileName))
+                {
+                    string persistentCandidate = Path.Combine(GetContainersDirectory(), fileName);
+                    if (File.Exists(persistentCandidate))
+                    {
+                        return true;
+                    }
                 }
             }
 
             return false;
+        }
+
+        public string ResolveContainerArgument(string? containerArg)
+        {
+            return ResolveContainerArgumentStatic(containerArg);
+        }
+
+        public static string ResolveContainerArgumentStatic(string? containerArg)
+        {
+            var validPaths = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(containerArg))
+            {
+                var parts = containerArg.Split(new[] { ';', '|', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                foreach (var rawPart in parts)
+                {
+                    string part = rawPart.Trim('\"', '\'', ' ');
+                    if (string.IsNullOrWhiteSpace(part)) continue;
+
+                    if (File.Exists(part) || Directory.Exists(part))
+                    {
+                        validPaths.Add(part);
+                    }
+                    else
+                    {
+                        // Check if file with same filename was saved to persistent Containers storage
+                        string fileName = Path.GetFileName(part);
+                        if (!string.IsNullOrWhiteSpace(fileName))
+                        {
+                            string persistentCandidate = Path.Combine(GetContainersDirectory(), fileName);
+                            if (File.Exists(persistentCandidate))
+                            {
+                                validPaths.Add(persistentCandidate);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If no explicitly configured paths exist, search persistent Containers directory for any RAF files
+            if (validPaths.Count == 0)
+            {
+                try
+                {
+                    string containerDir = GetContainersDirectory();
+                    if (Directory.Exists(containerDir))
+                    {
+                        var foundFiles = Directory.GetFiles(containerDir, "*.*", SearchOption.TopDirectoryOnly)
+                            .Where(f => f.EndsWith(".raf", StringComparison.OrdinalIgnoreCase))
+                            .ToList();
+
+                        foreach (var f in foundFiles)
+                        {
+                            validPaths.Add(f);
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            if (validPaths.Count > 0)
+            {
+                return string.Join(";", validPaths.Distinct(StringComparer.OrdinalIgnoreCase));
+            }
+
+            // If containerArg was provided as mock or hypothetical path in testing, keep it so tests can assert arguments
+            return !string.IsNullOrWhiteSpace(containerArg) ? containerArg.Trim() : string.Empty;
         }
 
         private static string BuildArguments(string inputRawPath, string outputRafPath, string containerArg, string? exiftoolPath)

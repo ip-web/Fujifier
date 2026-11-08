@@ -49,6 +49,7 @@ namespace Fujify.Services
         RafContainerInspection InspectContainer(string rafFilePath);
         Task<RafConversionResult> PatchModelAsync(string inputRafPath, string outputRafPath, string targetModel, CancellationToken cancellationToken = default);
         bool HasValidContainer(string? containerArg);
+        string ResolveContainerArgument(string? containerArg);
     }
 }
 

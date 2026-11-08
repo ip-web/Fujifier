@@ -1607,6 +1607,7 @@ namespace Fujify.ViewModels
                 Preferences.CloseAction = ok =>
                 {
                     RefreshSettings();
+                    RefreshCaptureOneModeState();
                     CloseModal();
                 };
                 ModalTitle = "Settings";
@@ -2643,7 +2644,8 @@ namespace Fujify.ViewModels
                 if (hasNonRafFiles)
                 {
                     string? containerPath = _settingsService.Settings.RafContainerPath;
-                    if (!_rafConverterService.HasValidContainer(containerPath))
+                    string resolvedContainer = _rafConverterService.ResolveContainerArgument(containerPath);
+                    if (string.IsNullOrWhiteSpace(resolvedContainer) || !_rafConverterService.HasValidContainer(resolvedContainer))
                     {
                         await _dialogService.ShowMessageAsync(
                             OwnerWindow,
@@ -2651,6 +2653,11 @@ namespace Fujify.ViewModels
                             LocalizationManager.Tr("MissingRafContainerError"),
                             isSuccess: false);
                         return;
+                    }
+                    if (string.IsNullOrEmpty(containerPath) || !string.Equals(containerPath, resolvedContainer, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _settingsService.Settings.RafContainerPath = resolvedContainer;
+                        _settingsService.Save();
                     }
                 }
             }
@@ -3183,7 +3190,8 @@ namespace Fujify.ViewModels
                 }
 
                 string? containerPath = _settingsService.Settings.RafContainerPath;
-                if (!_rafConverterService.HasValidContainer(containerPath))
+                string resolvedContainer = _rafConverterService.ResolveContainerArgument(containerPath);
+                if (string.IsNullOrWhiteSpace(resolvedContainer) || !_rafConverterService.HasValidContainer(resolvedContainer))
                 {
                     string err = LocalizationManager.Tr("MissingRafContainerError");
                     UpdateFileStatus(filePath, err);
@@ -3207,7 +3215,7 @@ namespace Fujify.ViewModels
                 var convResult = await _rafConverterService.ConvertToRafAsync(
                     filePath,
                     finalDestFilePath,
-                    containerPath!,
+                    resolvedContainer,
                     null,
                     ct);
 
