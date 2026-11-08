@@ -317,7 +317,7 @@ namespace Fujify.Services
                         IsSetupOrInstaller(a.Name));
                     if (explicitX64Setup != null) return explicitX64Setup;
 
-                    // 2. Setup/installer exe (e.g. Fujifier-v2.1.0-Setup.exe)
+                    // 2. Setup/installer exe (e.g. Fujifier-v2.1.1-Setup.exe)
                     var setupExe = x64Assets.FirstOrDefault(a =>
                         a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
                         IsSetupOrInstaller(a.Name));
