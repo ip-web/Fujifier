@@ -33,9 +33,19 @@ cd "$REPO_ROOT"
 
 # 1b. Build native raw2raf for both aarch64 and x86_64
 echo "=== Building native raw2raf dylib & binary for macOS ==="
-if [ ! -d "$REPO_ROOT/tools/Raw2Raf" ]; then
+if [ ! -f "$REPO_ROOT/tools/Raw2Raf/Cargo.toml" ]; then
+    echo "tools/Raw2Raf/Cargo.toml not found. Cloning Raw2Raf repository..."
+    if [ -d "$REPO_ROOT/tools/Raw2Raf/target" ]; then
+        mv "$REPO_ROOT/tools/Raw2Raf/target" /tmp/raw2raf_target_mac_cache
+    fi
+    rm -rf "$REPO_ROOT/tools/Raw2Raf"
     mkdir -p "$REPO_ROOT/tools"
     git clone --depth 1 https://github.com/ip-web/Raw2Raf.git "$REPO_ROOT/tools/Raw2Raf" || true
+    if [ -d "/tmp/raw2raf_target_mac_cache" ]; then
+        mkdir -p "$REPO_ROOT/tools/Raw2Raf/target"
+        mv /tmp/raw2raf_target_mac_cache/* "$REPO_ROOT/tools/Raw2Raf/target/" 2>/dev/null || true
+        rm -rf /tmp/raw2raf_target_mac_cache
+    fi
 fi
 if [ -d "$REPO_ROOT/tools/Raw2Raf" ]; then
     cd "$REPO_ROOT/tools/Raw2Raf"

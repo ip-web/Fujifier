@@ -189,21 +189,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Cache .NET iOS Workloads
-        id: cache-dotnet-ios
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.dotnet/sdk-manifests
-            ~/.dotnet/metadata/workloads
-            /usr/local/share/dotnet/sdk-manifests
-            /usr/local/share/dotnet/metadata/workloads
-          key: ${{ runner.os }}-dotnet-ios-workload-10.0
-          restore-keys: |
-            ${{ runner.os }}-dotnet-ios-workload-
-
       - name: Install iOS Workload
-        if: steps.cache-dotnet-ios.outputs.cache-hit != 'true'
         run: dotnet workload install ios
 
       - name: Cache Rust iOS Toolchain & Target Artifacts
@@ -231,9 +217,19 @@ jobs:
           cd ../..
 
           echo "=== Building native raw2raf_ffi for iOS ==="
-          if [ ! -d "tools/Raw2Raf" ]; then
+          if [ ! -f "tools/Raw2Raf/Cargo.toml" ]; then
+            echo "tools/Raw2Raf/Cargo.toml not found. Cloning Raw2Raf repository..."
+            if [ -d "tools/Raw2Raf/target" ]; then
+              mv tools/Raw2Raf/target /tmp/raw2raf_target_ios_cache
+            fi
+            rm -rf tools/Raw2Raf
             mkdir -p tools
             git clone --depth 1 https://github.com/ip-web/Raw2Raf.git tools/Raw2Raf
+            if [ -d "/tmp/raw2raf_target_ios_cache" ]; then
+              mkdir -p tools/Raw2Raf/target
+              mv /tmp/raw2raf_target_ios_cache/* tools/Raw2Raf/target/ 2>/dev/null || true
+              rm -rf /tmp/raw2raf_target_ios_cache
+            fi
           fi
           cd tools/Raw2Raf
           cargo build --release --target aarch64-apple-ios
