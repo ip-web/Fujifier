@@ -73,6 +73,20 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Cache Rust Toolchain & Target Artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            native/dnglab_ffi/target/
+            tools/Raw2Raf/target/
+          key: ${{ runner.os }}-cargo-macos-${{ hashFiles('native/dnglab_ffi/Cargo.lock', 'native/dnglab_ffi/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-macos-
+
       - name: Build Native Libraries & Package macOS Apps
         run: |
           chmod +x ./package_macos.sh
@@ -175,8 +189,36 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Cache .NET iOS Workloads
+        id: cache-dotnet-ios
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.dotnet/sdk-manifests
+            ~/.dotnet/metadata/workloads
+            /usr/local/share/dotnet/sdk-manifests
+            /usr/local/share/dotnet/metadata/workloads
+          key: ${{ runner.os }}-dotnet-ios-workload-10.0
+          restore-keys: |
+            ${{ runner.os }}-dotnet-ios-workload-
+
       - name: Install iOS Workload
+        if: steps.cache-dotnet-ios.outputs.cache-hit != 'true'
         run: dotnet workload install ios
+
+      - name: Cache Rust iOS Toolchain & Target Artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            native/dnglab_ffi/target/
+            tools/Raw2Raf/target/
+          key: ${{ runner.os }}-cargo-ios-${{ hashFiles('native/dnglab_ffi/Cargo.lock', 'native/dnglab_ffi/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-ios-
 
       - name: Build Native Rust Libraries for iOS (dnglab_ffi & raw2raf_ffi)
         run: |
