@@ -5,7 +5,7 @@
 <h1 align="center">FUJIFIER</h1>
 
 <p align="center">
-  <strong>Authentic Fujifilm Film Simulation Profiles for Any Camera RAW Photo</strong>
+  <strong>Fujifilm Film Simulation Profiles for Any Camera RAW Photo</strong>
 </p>
 
 <p align="center">
@@ -25,15 +25,15 @@
 
 ## 🌟 What is Fujifier?
 
-**Fujifier** unlocks authentic **Fujifilm Film Simulation color profiles** (including Classic Chrome, Classic Neg, Nostalgic Neg, Eterna, Reala Ace, Acros, and Velvia) for **any camera RAW file** inside Adobe Lightroom and Adobe Camera Raw (ACR).
+**Fujifier** unlocks **Fujifilm Film Simulation color profiles** (including Classic Chrome, Classic Neg, Nostalgic Neg, Eterna, Reala Ace, Acros, and Velvia) for **any camera RAW file** inside Adobe Lightroom, Adobe Camera Raw (ACR), and Capture One.
 
-Whether you shoot with **Sony, Canon, Nikon, Panasonic Lumix, Olympus/OM System, Leica, Pentax, or Hasselblad**, Fujifier converts your RAW files into DNG format with calibrated camera metadata and color matrix parameters recognized natively by Adobe Lightroom develop engines.
+Whether you shoot with **Sony, Canon, Nikon, Panasonic Lumix, Olympus/OM System, Leica, Pentax, or Hasselblad**, Fujifier converts your RAW files into DNG format with calibrated camera metadata and color matrix parameters recognized natively by Adobe Lightroom develop engines, or into compatible RAF containers for Capture One.
 
 ---
 
 ## 🚀 Key Features
 
-### 🎨 20 Authentic Fujifilm Film Simulations
+### 🎨 20 Fujifilm Film Simulations
 Unlock the full palette of modern Fujifilm camera profiles (based on the flagship Fujifilm X-T5 and GFX series):
 - **Color Profiles**: PROVIA / Standard, Velvia / Vivid, ASTIA / Soft, CLASSIC CHROME, PRO Neg. Hi, PRO Neg. Std, Classic Neg., Nostalgic Neg., ETERNA / Cinema, ETERNA BLEACH BYPASS, REALA ACE.
 - **Monochrome Profiles**: ACROS (Standard, +Ye, +R, +G), MONOCHROME (Standard, +Ye, +R, +G), SEPIA.
@@ -41,7 +41,7 @@ Unlock the full palette of modern Fujifilm camera profiles (based on the flagshi
 ### 🎯 Dual Workflow Support: Adobe Lightroom (DNG) & Capture One (RAF)
 Switch seamlessly between develop targets directly in the app:
 - **Lightroom Mode (`.DNG`)**: Calibrated DNG output with embedded metadata and color matrix parameters recognized natively by Adobe Lightroom and Adobe Camera Raw.
-- **Capture One Mode (`.RAF`)**: Advanced in-process donor container repacking via `raw2raf_ffi`. Converts any non-Fujifilm camera RAW directly into a genuine Fujifilm `.RAF` file, unlocking Fujifilm Film Simulations natively inside Capture One Pro and Capture One Mobile! Supports automatic container selection and multiple Bayer donor profiles (GFX, X-A series, X-T100/200, XF10).
+- **Capture One Mode (`.RAF`)**: Advanced in-process donor container repacking via `raw2raf_ffi`. Converts non-Fujifilm camera RAW files directly into compatible Fujifilm `.RAF` containers, unlocking Fujifilm Film Simulations natively inside Capture One Pro and Capture One Mobile! Supports automatic container selection and multiple Bayer donor profiles (GFX, X-A series, X-T100/200, XF10).
 
 ### 🌐 Universal Multiplatform Support
 Fujifier runs natively across desktop and mobile devices:
@@ -186,15 +186,15 @@ To convert your Nikon shots with Fujifier, configure your camera to shoot in **L
 **Yes! Starting in v2.1.0, Fujifier features full native Capture One integration.**
 
 By switching to **Capture One Mode** in Fujifier:
-- Fujifier converts your RAW photos into genuine Fujifilm `.RAF` files using a reference Bayer donor RAF container (such as GFX 50S II, X-A series, X-T100, X-T200, or XF10).
-- When opened in Capture One Pro (or Capture One Mobile on iOS/iPadOS), Capture One identifies the camera as a native Fujifilm camera and unlocks the full **Fujifilm Film Simulation** drop-down menu in the Base Characteristics tool!
+- Fujifier converts your RAW photos into compatible Fujifilm `.RAF` container files using a reference Bayer donor RAF container (such as GFX 50S II, X-A series, X-T100, X-T200, or XF10).
+- When opened in Capture One Pro (or Capture One Mobile on iOS/iPadOS), Capture One identifies the camera metadata and unlocks the full **Fujifilm Film Simulation** drop-down menu in the Base Characteristics tool!
 - On desktop and mobile, you can even tap **"Open in Capture One"** right from the batch summary to hand off your converted photos instantly.
 </details>
 
 <details>
 <summary><strong>Q: Will converted photos look identical to photos taken on a Fujifilm camera?</strong></summary>
 
-The profiles applied in Lightroom are Adobe's official camera profile recreations of Fujifilm's film simulations. In testing with Sony, Canon, and Nikon sensors, the color reproduction, tonal roll-off, and film simulation aesthetics match Adobe's Fujifilm camera profiles exceptionally well.
+The profiles applied in Lightroom are Adobe's camera profile recreations of Fujifilm's film simulations. In testing with Sony, Canon, and Nikon sensors, the color reproduction, tonal roll-off, and film simulation aesthetics match Adobe's Fujifilm camera profiles exceptionally well.
 </details>
 
 <details>
@@ -225,6 +225,12 @@ Fujifier is built upon world-class open-source libraries:
 - **Phil Harvey** for the irreplaceable [ExifTool](https://exiftool.org/) (Perl Artistic License).
 - **The DNGLab Project** for [DNGLab](https://github.com/dnglab/dnglab) (LGPL v2.1).
 - **Avalonia UI** team for the cross-platform UI framework (MIT License).
+
+---
+
+## ⚖️ Legal Disclaimer
+
+Fujifier is an independent open-source project and is not affiliated with, endorsed by, or sponsored by FUJIFILM Corporation, Adobe Inc., or Capture One A/S. "Fujifilm", "Fujinon", and individual simulation names (such as Provia, Velvia, Astia, Classic Chrome, Classic Neg, Nostalgic Neg, Eterna, Reala Ace, Acros) are trademarks or registered trademarks of FUJIFILM Corporation. "Adobe", "Lightroom", and "Camera Raw" are registered trademarks of Adobe Inc. "Capture One" is a registered trademark of Capture One A/S. All trademarks, brand names, and model designations are referenced solely for descriptive, educational, and interoperability purposes.
 
 ---
 

@@ -1,6 +1,6 @@
 # Fujifilm Film Simulation Develop Presets for Adobe Lightroom & Camera Raw
 
-These develop presets allow you to quickly apply all **20 authentic Fujifilm Film Simulation profiles** with a single click in Adobe Lightroom Classic, Adobe Lightroom (Cloud), and Adobe Camera Raw (ACR).
+These develop presets allow you to quickly apply all **20 Fujifilm Film Simulation profiles** with a single click in Adobe Lightroom Classic, Adobe Lightroom (Cloud), and Adobe Camera Raw (ACR).
 
 ## ⚠️ Important Requirement
 > **Photos must be converted to DNG using Fujifier beforehand.**

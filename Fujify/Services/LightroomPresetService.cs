@@ -44,7 +44,7 @@ namespace Fujify.Services
                 DisplayName: "Fujifilm PROVIA - Standard",
                 CameraProfile: "Camera PROVIA/Standard",
                 FileName: "Fujifilm PROVIA - Standard.xmp",
-                Description: "Authentic Fujifilm Provia/Standard simulation with neutral natural colors.",
+                Description: "Fujifilm Provia/Standard simulation with neutral natural colors.",
                 Uuid: "F0010001000040008000000000000001"
             ),
             new(
@@ -470,7 +470,7 @@ namespace Fujify.Services
                 readmeWriter.WriteLine();
                 readmeWriter.WriteLine("IMPORTANT REQUIREMENT:");
                 readmeWriter.WriteLine("Photos MUST be converted to DNG using Fujifier beforehand.");
-                readmeWriter.WriteLine("Fujifilm camera profiles only apply to Fujified photos or genuine Fujifilm cameras.");
+                readmeWriter.WriteLine("Fujifilm camera profiles only apply to Fujified photos or native Fujifilm cameras.");
                 readmeWriter.WriteLine("These presets switch exclusively the camera profile without altering your exposure, white balance, or any other develop sliders.");
                 readmeWriter.WriteLine();
                 readmeWriter.WriteLine("HOW TO INSTALL:");
