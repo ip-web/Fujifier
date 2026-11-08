@@ -25,7 +25,9 @@ using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Fujify.Common;
@@ -237,46 +239,187 @@ namespace Fujify.Services
             return null;
         }
 
-        public static UpdateAsset? SelectMatchingAsset(IEnumerable<UpdateAsset> assets)
+        private static readonly Regex ArmRegex = new(@"(^|[^a-zA-Z0-9])(arm|arm64|aarch64)([^a-zA-Z0-9]|$)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex X64Regex = new(@"(^|[^a-zA-Z0-9])(x64|x86_64|amd64|x86)([^a-zA-Z0-9]|$)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static bool IsArmName(string name) => ArmRegex.IsMatch(name);
+        private static bool IsX64Name(string name) => X64Regex.IsMatch(name);
+        private static bool IsSetupOrInstaller(string name) =>
+            name.Contains("setup", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("installer", StringComparison.OrdinalIgnoreCase);
+
+        public static UpdateAsset? SelectMatchingAsset(
+            IEnumerable<UpdateAsset> assets,
+            Architecture? targetArch = null,
+            OSPlatform? targetPlatform = null)
         {
             var list = assets?.ToList();
             if (list == null || list.Count == 0) return null;
 
-            if (OperatingSystem.IsWindows())
+            var arch = targetArch ?? RuntimeInformation.ProcessArchitecture;
+            bool isWindows = targetPlatform.HasValue ? targetPlatform.Value == OSPlatform.Windows : OperatingSystem.IsWindows();
+            bool isMacOS = targetPlatform.HasValue ? targetPlatform.Value == OSPlatform.OSX : OperatingSystem.IsMacOS();
+            bool isLinux = targetPlatform.HasValue ? targetPlatform.Value == OSPlatform.Linux : OperatingSystem.IsLinux();
+
+            if (isWindows)
             {
-                // Prefer installer/setup executable
-                var setupExe = list.FirstOrDefault(a => a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
-                                                        (a.Name.Contains("setup", StringComparison.OrdinalIgnoreCase) ||
-                                                         a.Name.Contains("installer", StringComparison.OrdinalIgnoreCase)));
-                if (setupExe != null) return setupExe;
+                bool isArm = arch == Architecture.Arm64 || arch == Architecture.Arm;
 
-                var anyExe = list.FirstOrDefault(a => a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
-                if (anyExe != null) return anyExe;
+                var winAssets = list.Where(a =>
+                    a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                    a.Name.EndsWith(".msi", StringComparison.OrdinalIgnoreCase) ||
+                    (a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+                     (a.Name.Contains("win", StringComparison.OrdinalIgnoreCase) ||
+                      a.Name.Contains("windows", StringComparison.OrdinalIgnoreCase)))
+                ).ToList();
 
-                return list.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
-                                                (a.Name.Contains("win", StringComparison.OrdinalIgnoreCase) ||
-                                                 a.Name.Contains("windows", StringComparison.OrdinalIgnoreCase)));
+                if (isArm)
+                {
+                    // 1. ARM64 setup/installer exe
+                    var armSetup = winAssets.FirstOrDefault(a =>
+                        a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                        IsArmName(a.Name) &&
+                        IsSetupOrInstaller(a.Name));
+                    if (armSetup != null) return armSetup;
+
+                    // 2. Any ARM64 exe
+                    var armExe = winAssets.FirstOrDefault(a =>
+                        a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                        IsArmName(a.Name));
+                    if (armExe != null) return armExe;
+
+                    // 3. ARM64 portable zip
+                    var armZip = winAssets.FirstOrDefault(a =>
+                        a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+                        IsArmName(a.Name));
+                    if (armZip != null) return armZip;
+
+                    // Fallback to generic setup (x64 setup runs under emulation on ARM64 Windows)
+                    var genericSetup = winAssets.FirstOrDefault(a =>
+                        a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                        IsSetupOrInstaller(a.Name));
+                    if (genericSetup != null) return genericSetup;
+
+                    var anyExe = winAssets.FirstOrDefault(a => a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
+                    if (anyExe != null) return anyExe;
+
+                    return winAssets.FirstOrDefault();
+                }
+                else
+                {
+                    // Running on x64 / x86 - strictly exclude ARM binaries!
+                    var x64Assets = winAssets.Where(a => !IsArmName(a.Name)).ToList();
+
+                    // 1. Setup/installer exe with explicit x64/x86_64
+                    var explicitX64Setup = x64Assets.FirstOrDefault(a =>
+                        a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                        IsX64Name(a.Name) &&
+                        IsSetupOrInstaller(a.Name));
+                    if (explicitX64Setup != null) return explicitX64Setup;
+
+                    // 2. Setup/installer exe (e.g. Fujifier-v2.1.0-Setup.exe)
+                    var setupExe = x64Assets.FirstOrDefault(a =>
+                        a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                        IsSetupOrInstaller(a.Name));
+                    if (setupExe != null) return setupExe;
+
+                    // 3. Any x64 exe
+                    var x64Exe = x64Assets.FirstOrDefault(a =>
+                        a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+                        IsX64Name(a.Name));
+                    if (x64Exe != null) return x64Exe;
+
+                    // 4. Any exe (non-ARM)
+                    var anyExe = x64Assets.FirstOrDefault(a => a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
+                    if (anyExe != null) return anyExe;
+
+                    // 5. Explicit x64 portable zip
+                    var x64Zip = x64Assets.FirstOrDefault(a =>
+                        a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+                        IsX64Name(a.Name));
+                    if (x64Zip != null) return x64Zip;
+
+                    // 6. Generic zip
+                    return x64Assets.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+                }
             }
 
-            if (OperatingSystem.IsMacOS())
+            if (isMacOS)
             {
-                // Prefer macOS zip or dmg matching architecture
-                bool isArm = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture == System.Runtime.InteropServices.Architecture.Arm64;
-                string archKeyword = isArm ? "arm" : "intel";
+                bool isArm = arch == Architecture.Arm64 || arch == Architecture.Arm;
 
-                var matchedArch = list.FirstOrDefault(a => (a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) || a.Name.EndsWith(".dmg", StringComparison.OrdinalIgnoreCase)) &&
-                                                           a.Name.Contains(archKeyword, StringComparison.OrdinalIgnoreCase));
-                if (matchedArch != null) return matchedArch;
+                var macAssets = list.Where(a =>
+                    (a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                     a.Name.EndsWith(".dmg", StringComparison.OrdinalIgnoreCase) ||
+                     a.Name.EndsWith(".pkg", StringComparison.OrdinalIgnoreCase)) &&
+                    (a.Name.Contains("mac", StringComparison.OrdinalIgnoreCase) ||
+                     a.Name.Contains("osx", StringComparison.OrdinalIgnoreCase) ||
+                     a.Name.Contains("darwin", StringComparison.OrdinalIgnoreCase) ||
+                     a.Name.Contains("applesilicon", StringComparison.OrdinalIgnoreCase))
+                ).ToList();
 
-                return list.FirstOrDefault(a => (a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) || a.Name.EndsWith(".dmg", StringComparison.OrdinalIgnoreCase)) &&
-                                                (a.Name.Contains("mac", StringComparison.OrdinalIgnoreCase) || a.Name.Contains("osx", StringComparison.OrdinalIgnoreCase)));
+                if (isArm)
+                {
+                    // 1. Apple Silicon / ARM64
+                    var armAsset = macAssets.FirstOrDefault(a =>
+                        a.Name.Contains("applesilicon", StringComparison.OrdinalIgnoreCase) ||
+                        a.Name.Contains("apple-silicon", StringComparison.OrdinalIgnoreCase) ||
+                        IsArmName(a.Name));
+                    if (armAsset != null) return armAsset;
+
+                    // 2. Universal build
+                    var universalAsset = macAssets.FirstOrDefault(a => a.Name.Contains("universal", StringComparison.OrdinalIgnoreCase));
+                    if (universalAsset != null) return universalAsset;
+
+                    return macAssets.FirstOrDefault();
+                }
+                else
+                {
+                    // Intel x64 - exclude Apple Silicon / ARM builds
+                    var intelAssets = macAssets.Where(a =>
+                        !a.Name.Contains("applesilicon", StringComparison.OrdinalIgnoreCase) &&
+                        !a.Name.Contains("apple-silicon", StringComparison.OrdinalIgnoreCase) &&
+                        !IsArmName(a.Name)).ToList();
+
+                    // 1. Explicit Intel / x64
+                    var intelAsset = intelAssets.FirstOrDefault(a =>
+                        a.Name.Contains("intel", StringComparison.OrdinalIgnoreCase) ||
+                        IsX64Name(a.Name));
+                    if (intelAsset != null) return intelAsset;
+
+                    // 2. Universal build
+                    var universalAsset = macAssets.FirstOrDefault(a => a.Name.Contains("universal", StringComparison.OrdinalIgnoreCase));
+                    if (universalAsset != null) return universalAsset;
+
+                    return intelAssets.FirstOrDefault();
+                }
             }
 
-            if (OperatingSystem.IsLinux())
+            if (isLinux)
             {
-                return list.FirstOrDefault(a => a.Name.Contains("linux", StringComparison.OrdinalIgnoreCase) &&
-                                                (a.Name.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ||
-                                                 a.Name.EndsWith(".AppImage", StringComparison.OrdinalIgnoreCase)));
+                bool isArm = arch == Architecture.Arm64 || arch == Architecture.Arm;
+
+                var linuxAssets = list.Where(a =>
+                    a.Name.Contains("linux", StringComparison.OrdinalIgnoreCase) &&
+                    (a.Name.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ||
+                     a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                     a.Name.EndsWith(".AppImage", StringComparison.OrdinalIgnoreCase) ||
+                     a.Name.EndsWith(".deb", StringComparison.OrdinalIgnoreCase))
+                ).ToList();
+
+                if (isArm)
+                {
+                    var armAsset = linuxAssets.FirstOrDefault(a => IsArmName(a.Name));
+                    if (armAsset != null) return armAsset;
+                    return linuxAssets.FirstOrDefault();
+                }
+                else
+                {
+                    var x64Assets = linuxAssets.Where(a => !IsArmName(a.Name)).ToList();
+                    var explicitX64 = x64Assets.FirstOrDefault(a => IsX64Name(a.Name));
+                    if (explicitX64 != null) return explicitX64;
+                    return x64Assets.FirstOrDefault();
+                }
             }
 
             return list.FirstOrDefault();

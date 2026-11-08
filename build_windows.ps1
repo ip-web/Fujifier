@@ -143,10 +143,10 @@ if ($Architecture -eq "All" -or $Architecture -eq "arm64") {
         Write-Host "Compiling Inno Setup ARM64 installer..." -ForegroundColor Cyan
         & $iscc `
             /DMyAppSourceDir="publish\win-arm64" `
-            /DMyOutputBaseFilename="Fujifier-v2.1.0-Setup-ARM64" `
+            /DMyOutputBaseFilename="Fujifier-v2.1.0-Windows-ARM64-Setup" `
             /DMyArchAllowed="arm64" `
             "$repoRoot\installer.iss"
-        Write-Host "-> Installer created: $(Join-Path $releaseDir 'Fujifier-v2.1.0-Setup-ARM64.exe')" -ForegroundColor Green
+        Write-Host "-> Installer created: $(Join-Path $releaseDir 'Fujifier-v2.1.0-Windows-ARM64-Setup.exe')" -ForegroundColor Green
     }
 }
 

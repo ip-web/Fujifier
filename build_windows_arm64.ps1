@@ -84,10 +84,10 @@ if ($iscc) {
     Write-Host "Compiling Inno Setup ARM64 installer using $iscc..." -ForegroundColor Cyan
     & $iscc `
         /DMyAppSourceDir="publish\win-arm64" `
-        /DMyOutputBaseFilename="Fujifier-v2.1.0-Setup-ARM64" `
+        /DMyOutputBaseFilename="Fujifier-v2.1.0-Windows-ARM64-Setup" `
         /DMyArchAllowed="arm64" `
         "$repoRoot\installer.iss"
-    Write-Host "-> Installer created: $(Join-Path $releaseDir 'Fujifier-v2.1.0-Setup-ARM64.exe')" -ForegroundColor Green
+    Write-Host "-> Installer created: $(Join-Path $releaseDir 'Fujifier-v2.1.0-Windows-ARM64-Setup.exe')" -ForegroundColor Green
 } else {
     Write-Warning "ISCC.exe (Inno Setup) not found. Skipped installer build."
 }

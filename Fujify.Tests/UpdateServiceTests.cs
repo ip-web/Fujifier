@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using Fujify.Common;
 using Fujify.Models;
 using Fujify.Services;
@@ -162,6 +163,119 @@ namespace Fujify.Tests
                 Assert.NotNull(match);
                 Assert.Contains("linux", match.Name);
             }
+        }
+
+        [Fact]
+        public void SelectMatchingAsset_OnWindows_WhenX64_IgnoresArm64InstallerAndSelectsX64Setup()
+        {
+            // Simulate the exact asset listing from GitHub release where ARM64 may appear
+            var assets = new List<UpdateAsset>
+            {
+                new UpdateAsset { Name = "Fujifier-v2.1.0-Android-arm64.apk", DownloadUrl = "https://example.com/apk", Size = 50000000 },
+                new UpdateAsset { Name = "Fujifier-v2.1.0-iOS-arm64-Payload.zip", DownloadUrl = "https://example.com/ios", Size = 50000000 },
+                new UpdateAsset { Name = "Fujifier-v2.1.0-Linux-x64-Portable.tar.gz", DownloadUrl = "https://example.com/linux", Size = 50000000 },
+                new UpdateAsset { Name = "Fujifier-v2.1.0-macOS-AppleSilicon.zip", DownloadUrl = "https://example.com/mac-arm", Size = 50000000 },
+                new UpdateAsset { Name = "Fujifier-v2.1.0-macOS-Intel.zip", DownloadUrl = "https://example.com/mac-intel", Size = 50000000 },
+                new UpdateAsset { Name = "Fujifier-v2.1.0-Setup-ARM64.exe", DownloadUrl = "https://example.com/arm64-setup", Size = 40000000 },
+                new UpdateAsset { Name = "Fujifier-v2.1.0-Setup.exe", DownloadUrl = "https://example.com/x64-setup", Size = 40000000 },
+                new UpdateAsset { Name = "Fujifier-v2.1.0-Windows-ARM64-Portable.zip", DownloadUrl = "https://example.com/arm64-zip", Size = 40000000 },
+                new UpdateAsset { Name = "Fujifier-v2.1.0-Windows-ARM64-Setup.exe", DownloadUrl = "https://example.com/arm64-setup2", Size = 40000000 },
+                new UpdateAsset { Name = "Fujifier-v2.1.0-Windows-x64-Portable.zip", DownloadUrl = "https://example.com/x64-zip", Size = 40000000 }
+            };
+
+            var match = UpdateService.SelectMatchingAsset(assets, Architecture.X64, OSPlatform.Windows);
+
+            Assert.NotNull(match);
+            Assert.Equal("Fujifier-v2.1.0-Setup.exe", match.Name);
+        }
+
+        [Fact]
+        public void SelectMatchingAsset_OnWindows_WhenArm64_PrefersArm64Installer()
+        {
+            var assets = new List<UpdateAsset>
+            {
+                new UpdateAsset { Name = "Fujifier-v2.1.0-Setup.exe", DownloadUrl = "https://example.com/x64-setup", Size = 40000000 },
+                new UpdateAsset { Name = "Fujifier-v2.1.0-Windows-ARM64-Portable.zip", DownloadUrl = "https://example.com/arm64-zip", Size = 40000000 },
+                new UpdateAsset { Name = "Fujifier-v2.1.0-Windows-ARM64-Setup.exe", DownloadUrl = "https://example.com/arm64-setup", Size = 40000000 },
+                new UpdateAsset { Name = "Fujifier-v2.1.0-Windows-x64-Portable.zip", DownloadUrl = "https://example.com/x64-zip", Size = 40000000 }
+            };
+
+            var match = UpdateService.SelectMatchingAsset(assets, Architecture.Arm64, OSPlatform.Windows);
+
+            Assert.NotNull(match);
+            Assert.Equal("Fujifier-v2.1.0-Windows-ARM64-Setup.exe", match.Name);
+        }
+
+        [Fact]
+        public void SelectMatchingAsset_OnWindows_WhenArm64_WithOnlyLegacyArmSetupName_SelectsIt()
+        {
+            var assets = new List<UpdateAsset>
+            {
+                new UpdateAsset { Name = "Fujifier-v2.1.0-Setup-ARM64.exe", DownloadUrl = "https://example.com/arm64-setup", Size = 40000000 },
+                new UpdateAsset { Name = "Fujifier-v2.1.0-Setup.exe", DownloadUrl = "https://example.com/x64-setup", Size = 40000000 }
+            };
+
+            var matchArm = UpdateService.SelectMatchingAsset(assets, Architecture.Arm64, OSPlatform.Windows);
+            var matchX64 = UpdateService.SelectMatchingAsset(assets, Architecture.X64, OSPlatform.Windows);
+
+            Assert.NotNull(matchArm);
+            Assert.Equal("Fujifier-v2.1.0-Setup-ARM64.exe", matchArm.Name);
+
+            Assert.NotNull(matchX64);
+            Assert.Equal("Fujifier-v2.1.0-Setup.exe", matchX64.Name);
+        }
+
+        [Fact]
+        public void SelectMatchingAsset_OnWindows_WhenArm64_FallbackToGenericSetupIfNoArmAvailable()
+        {
+            var assets = new List<UpdateAsset>
+            {
+                new UpdateAsset { Name = "Fujifier-v2.1.0-Setup.exe", DownloadUrl = "https://example.com/setup", Size = 40000000 },
+                new UpdateAsset { Name = "Fujifier-v2.1.0-Windows-x64-Portable.zip", DownloadUrl = "https://example.com/zip", Size = 40000000 }
+            };
+
+            var match = UpdateService.SelectMatchingAsset(assets, Architecture.Arm64, OSPlatform.Windows);
+
+            Assert.NotNull(match);
+            Assert.Equal("Fujifier-v2.1.0-Setup.exe", match.Name);
+        }
+
+        [Fact]
+        public void SelectMatchingAsset_OnMacOS_DistinguishesAppleSiliconAndIntel()
+        {
+            var assets = new List<UpdateAsset>
+            {
+                new UpdateAsset { Name = "Fujifier-v2.1.0-macOS-AppleSilicon.zip", DownloadUrl = "https://example.com/arm", Size = 50000000 },
+                new UpdateAsset { Name = "Fujifier-v2.1.0-macOS-Intel.zip", DownloadUrl = "https://example.com/intel", Size = 50000000 }
+            };
+
+            var matchArm = UpdateService.SelectMatchingAsset(assets, Architecture.Arm64, OSPlatform.OSX);
+            var matchIntel = UpdateService.SelectMatchingAsset(assets, Architecture.X64, OSPlatform.OSX);
+
+            Assert.NotNull(matchArm);
+            Assert.Equal("Fujifier-v2.1.0-macOS-AppleSilicon.zip", matchArm.Name);
+
+            Assert.NotNull(matchIntel);
+            Assert.Equal("Fujifier-v2.1.0-macOS-Intel.zip", matchIntel.Name);
+        }
+
+        [Fact]
+        public void SelectMatchingAsset_OnLinux_SelectsCorrectArchitecture()
+        {
+            var assets = new List<UpdateAsset>
+            {
+                new UpdateAsset { Name = "Fujifier-v2.1.0-Linux-x64-Portable.tar.gz", DownloadUrl = "https://example.com/linux-x64", Size = 50000000 },
+                new UpdateAsset { Name = "Fujifier-v2.1.0-Linux-arm64-Portable.tar.gz", DownloadUrl = "https://example.com/linux-arm64", Size = 50000000 }
+            };
+
+            var matchX64 = UpdateService.SelectMatchingAsset(assets, Architecture.X64, OSPlatform.Linux);
+            var matchArm = UpdateService.SelectMatchingAsset(assets, Architecture.Arm64, OSPlatform.Linux);
+
+            Assert.NotNull(matchX64);
+            Assert.Equal("Fujifier-v2.1.0-Linux-x64-Portable.tar.gz", matchX64.Name);
+
+            Assert.NotNull(matchArm);
+            Assert.Equal("Fujifier-v2.1.0-Linux-arm64-Portable.tar.gz", matchArm.Name);
         }
 
         [Fact]
