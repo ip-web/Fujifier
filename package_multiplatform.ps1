@@ -151,7 +151,7 @@ $infoPlist = @"
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>LSMinimumSystemVersion</key>
-    <string>11.0</string>
+    <string>12.0</string>
 </dict>
 </plist>
 "@

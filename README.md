@@ -209,6 +209,26 @@ Yes! If you shoot with an older Fujifilm camera (e.g. X-T2, X-Pro2, or X-T20), F
 Yes. By default, Fujifier preserves all original RAW files. When saving to the same folder, converted files receive a `-fujified` suffix, or you can choose to organize converted files into a dedicated subfolder.
 </details>
 
+<details>
+<summary><strong>Q: macOS says "The application 'Fujifier' can't be opened" on Apple Silicon. How do I fix it?</strong></summary>
+
+Because Fujifier is an open-source application distributed outside the Mac App Store, macOS Gatekeeper attaches a quarantine flag (`com.apple.quarantine`) to files downloaded from the web. In macOS Sonoma (14) and macOS Sequoia (15), Gatekeeper blocks unnotarized apps by default with this dialog.
+
+To open Fujifier on macOS:
+1. **Method 1 (System Settings — Recommended):**
+   - Try opening Fujifier once (you will see the message). Click **Done** or **Cancel**.
+   - Open **System Settings ** $\rightarrow$ **Privacy & Security**.
+   - Scroll down to the **Security** section where it states *"Fujifier was blocked to protect your Mac"*.
+   - Click **Open Anyway** and confirm with your password or Touch ID.
+2. **Method 2 (1-line Terminal Command):**
+   - Open the **Terminal** app and run:
+     ```bash
+     xattr -cr /Applications/Fujifier.app
+     ```
+     *(Or if Fujifier is still in your Downloads folder: `xattr -cr ~/Downloads/Fujifier.app`).*
+   - Fujifier will launch immediately.
+</details>
+
 ---
 
 ## 🤝 Contributing

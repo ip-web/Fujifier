@@ -180,7 +180,7 @@ EOF
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>LSMinimumSystemVersion</key>
-    <string>11.0</string>
+    <string>12.0</string>
 </dict>
 </plist>
 EOF
@@ -189,12 +189,15 @@ EOF
     cp "$REPO_ROOT/Fujify/Assets/images/logo.ico" "$APP_DIR/Contents/Resources/logo.ico"
     cp "$REPO_ROOT/Fujify/Assets/images/logos.png" "$APP_DIR/Contents/Resources/logo.png"
 
-    # Set execute bits
+    # Set execute bits on main executable, dylibs, and helper scripts
     chmod +x "$APP_DIR/Contents/MacOS/Fujifier" || true
     chmod +x "$APP_DIR/Contents/MacOS/libs/exiftool" || true
     chmod +x "$APP_DIR/Contents/MacOS/exiftool" || true
+    chmod +x "$APP_DIR/Contents/Frameworks/"*.dylib || true
+    chmod -R u+w,a+rx "$APP_DIR/Contents/MacOS" || true
 
-    # Ad-hoc code sign
+    # Ad-hoc code sign dylibs and the app bundle
+    find "$APP_DIR/Contents/Frameworks" -name "*.dylib" -exec codesign --force -s - {} + 2>/dev/null || true
     codesign --force --deep -s - "$APP_DIR" || true
 
     # Create Zip
