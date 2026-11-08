@@ -75,7 +75,8 @@ namespace Fujify.Services
             // 3. Fallback to external DNGLab CLI process
             if (OperatingSystem.IsIOS())
             {
-                return new ConversionResult(false, null, "Native conversion library (dnglab_ffi) is required on iOS. External process execution is not permitted by iOS.");
+                string detail = !string.IsNullOrEmpty(DngLabNative.LoadError) ? $" ({DngLabNative.LoadError})" : "";
+                return new ConversionResult(false, null, $"Native conversion library (dnglab_ffi) is required on iOS{detail}. External process execution is not permitted by iOS.");
             }
 
             string? dngLabPath = FindDngLabPath();
@@ -125,7 +126,8 @@ namespace Fujify.Services
             // 3. Fallback to external DNGLab CLI process
             if (OperatingSystem.IsIOS())
             {
-                return new ConversionResult(false, null, "Native conversion library (dnglab_ffi) is required on iOS. External process execution is not permitted by iOS.");
+                string detail = !string.IsNullOrEmpty(DngLabNative.LoadError) ? $" ({DngLabNative.LoadError})" : "";
+                return new ConversionResult(false, null, $"Native conversion library (dnglab_ffi) is required on iOS{detail}. External process execution is not permitted by iOS.");
             }
 
             string? dngLabPath = FindDngLabPath();

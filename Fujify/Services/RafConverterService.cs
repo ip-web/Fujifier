@@ -80,7 +80,8 @@ namespace Fujify.Services
             // 2. Mobile platforms require native library (external processes are forbidden)
             if (OperatingSystem.IsIOS() || OperatingSystem.IsAndroid())
             {
-                return new RafConversionResult(false, null, "Native conversion library (raw2raf_ffi) is required on mobile platforms. External process execution is not permitted.");
+                string detail = !string.IsNullOrEmpty(Raw2RafNative.LoadError) ? $" ({Raw2RafNative.LoadError})" : "";
+                return new RafConversionResult(false, null, $"Native conversion library (raw2raf_ffi) is required on mobile platforms{detail}. External process execution is not permitted.");
             }
 
             // 3. Fallback to CLI process on desktop platforms
@@ -157,7 +158,8 @@ namespace Fujify.Services
             // 2. Mobile platforms require native library (external processes are forbidden)
             if (OperatingSystem.IsIOS() || OperatingSystem.IsAndroid())
             {
-                return new RafConversionResult(false, null, "Native conversion library (raw2raf_ffi) is required on mobile platforms. External process execution is not permitted.");
+                string detail = !string.IsNullOrEmpty(Raw2RafNative.LoadError) ? $" ({Raw2RafNative.LoadError})" : "";
+                return new RafConversionResult(false, null, $"Native conversion library (raw2raf_ffi) is required on mobile platforms{detail}. External process execution is not permitted.");
             }
 
             // 3. Fallback to CLI process on desktop platforms

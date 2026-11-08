@@ -274,12 +274,20 @@
                                                         <TextBlock Text="{Binding CameraMakeAndModel}" FontSize="12"
                                                                    Foreground="{DynamicResource AppTextSecondaryBrush}"
                                                                    TextTrimming="CharacterEllipsis"/>
-                                                        <Border HorizontalAlignment="Left" CornerRadius="6" Padding="8,3"
-                                                                Background="{DynamicResource AppSurfaceSecondaryBrush}">
-                                                            <TextBlock Text="{Binding Status}" FontSize="10" FontWeight="SemiBold"
-                                                                       Foreground="{Binding StatusColor}"
-                                                                       HorizontalAlignment="Center" TextAlignment="Center"/>
-                                                        </Border>
+                                                        <Button Background="Transparent" BorderThickness="0" Padding="0"
+                                                                Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ShowFileErrorCommand}"
+                                                                CommandParameter="{Binding}"
+                                                                IsEnabled="{Binding IsError}"
+                                                                HorizontalAlignment="Left"
+                                                                Cursor="Hand">
+                                                            <Border CornerRadius="6" Padding="8,3"
+                                                                    Background="{DynamicResource AppSurfaceSecondaryBrush}"
+                                                                    ToolTip.Tip="{Binding Status}">
+                                                                <TextBlock Text="{Binding Status}" FontSize="10" FontWeight="SemiBold"
+                                                                           Foreground="{Binding StatusColor}"
+                                                                           TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis"/>
+                                                            </Border>
+                                                        </Button>
                                                     </StackPanel>
 
                                                     <!-- Remove Action (Hidden during multi-select mode) -->
@@ -855,10 +863,13 @@
                                                 </StackPanel>
 
                                                 <!-- Status -->
-                                                <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2">
+                                                <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Spacing="2">
                                                     <TextBlock Text="{loc:Loc Status}" FontSize="8.5" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,0,0,3"/>
                                                     <TextBlock Text="{Binding SelectedFile.LocalizedStatus, FallbackValue='—'}" FontSize="11" FontWeight="SemiBold"
-                                                               Foreground="{DynamicResource AppAccentLightBrush}"/>
+                                                               Foreground="{Binding SelectedFile.StatusColor}"/>
+                                                    <TextBlock Text="{Binding SelectedFile.Status}" FontSize="10" TextWrapping="Wrap"
+                                                               Foreground="{Binding SelectedFile.StatusColor}"
+                                                               IsVisible="{Binding SelectedFile.IsError}"/>
                                                 </StackPanel>
                                             </Grid>
 
@@ -1219,7 +1230,7 @@
                                                         </DataGridTemplateColumn.Header>
                                                         <DataGridTemplateColumn.CellTemplate>
                                                             <DataTemplate x:DataType="models:FileItem">
-                                                                <Grid HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                                                                <Grid HorizontalAlignment="Stretch" VerticalAlignment="Center" ToolTip.Tip="{Binding Status}">
                                                                     <!-- Completed: Show single center-aligned status arrow -->
                                                                     <TextBlock IsVisible="{Binding IsCompleted}"
                                                                                Text="{Binding LocalizedStatus}"
@@ -1365,12 +1376,20 @@
                                                                                TextTrimming="CharacterEllipsis"/>
 
                                                                     <!-- Status & Remove Button Row -->
-                                                                    <Grid Grid.Row="2">
-                                                                        <TextBlock Text="{Binding Status}" FontSize="11"
-                                                                                   Foreground="{Binding StatusColor}" TextTrimming="CharacterEllipsis"
-                                                                                   HorizontalAlignment="Center" TextAlignment="Center"
-                                                                                   VerticalAlignment="Center"
-                                                                                   Margin="24,0,24,0"/>
+                                                                    <Grid Grid.Row="2" ToolTip.Tip="{Binding Status}">
+                                                                        <Button Background="Transparent" BorderThickness="0" Padding="0"
+                                                                                Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ShowFileErrorCommand}"
+                                                                                CommandParameter="{Binding}"
+                                                                                IsEnabled="{Binding IsError}"
+                                                                                HorizontalAlignment="Stretch"
+                                                                                VerticalAlignment="Center"
+                                                                                Margin="20,0,20,0"
+                                                                                Cursor="Hand">
+                                                                            <TextBlock Text="{Binding Status}" FontSize="10"
+                                                                                       Foreground="{Binding StatusColor}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                                                                                       HorizontalAlignment="Center" TextAlignment="Center"
+                                                                                       VerticalAlignment="Center"/>
+                                                                        </Button>
                                                                         <Button HorizontalAlignment="Right" Content="✕" Command="{Binding RemoveCommand}" CommandParameter="{Binding}"
                                                                                 Width="20" Height="20" Padding="0"
                                                                                 HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
@@ -1865,10 +1884,13 @@
                                                         </StackPanel>
 
                                                         <!-- Status -->
-                                                        <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2">
+                                                        <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Spacing="2">
                                                             <TextBlock Text="{loc:Loc Status}" FontSize="8.5" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,0,0,3"/>
                                                             <TextBlock Text="{Binding SelectedFile.LocalizedStatus, FallbackValue='—'}" FontSize="11" FontWeight="SemiBold"
-                                                                       Foreground="{DynamicResource AppAccentLightBrush}"/>
+                                                                       Foreground="{Binding SelectedFile.StatusColor}"/>
+                                                            <TextBlock Text="{Binding SelectedFile.Status}" FontSize="10" TextWrapping="Wrap"
+                                                                       Foreground="{Binding SelectedFile.StatusColor}"
+                                                                       IsVisible="{Binding SelectedFile.IsError}"/>
                                                         </StackPanel>
                                                     </Grid>
 

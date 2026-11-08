@@ -36,6 +36,12 @@ namespace Fujify.Services
         private const string LibraryName = "raw2raf_ffi";
         private static readonly object _initLock = new();
         private static bool? _isAvailable;
+        private static string? _loadError;
+
+        /// <summary>
+        /// Gets the last error message encountered when attempting to load the native raw2raf_ffi library.
+        /// </summary>
+        public static string? LoadError => _loadError;
 
         static Raw2RafNative()
         {
@@ -94,9 +100,10 @@ namespace Fujify.Services
                         IntPtr vPtr = raw2raf_version();
                         _isAvailable = vPtr != IntPtr.Zero;
                     }
-                    catch
+                    catch (Exception ex)
                     {
                         _isAvailable = false;
+                        _loadError = ex.Message;
                     }
                     return _isAvailable.Value;
                 }

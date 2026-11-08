@@ -65,7 +65,7 @@ namespace Fujify.Services
                 return directHandle;
             }
 
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string baseDir = AppContext.BaseDirectory ?? AppDomain.CurrentDomain.BaseDirectory;
             string osExt;
             string prefix = "";
 
@@ -174,6 +174,29 @@ namespace Fujify.Services
                 searchPaths.Add(Path.Combine("/opt/homebrew/lib", fileName));
                 searchPaths.Add(Path.Combine("/usr/local/lib", fileName));
                 searchPaths.Add(Path.Combine("/usr/lib", fileName));
+
+                // On iOS, also inspect NSBundle.MainBundle.BundlePath reflectively
+                try
+                {
+                    var nsBundleType = Type.GetType("Foundation.NSBundle, Microsoft.iOS");
+                    var mainBundleProp = nsBundleType?.GetProperty("MainBundle", BindingFlags.Public | BindingFlags.Static);
+                    var mainBundle = mainBundleProp?.GetValue(null);
+                    if (mainBundle != null)
+                    {
+                        var bundlePathProp = mainBundle.GetType().GetProperty("BundlePath");
+                        var bundlePath = bundlePathProp?.GetValue(mainBundle) as string;
+                        if (!string.IsNullOrEmpty(bundlePath))
+                        {
+                            searchPaths.Add(Path.Combine(bundlePath, fileName));
+                            searchPaths.Add(Path.Combine(bundlePath, "Frameworks", fileName));
+                            searchPaths.Add(Path.Combine(bundlePath, "Frameworks", $"{libraryName}.framework", libraryName));
+                        }
+                    }
+                }
+                catch
+                {
+                    // Fall through
+                }
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
@@ -224,7 +247,8 @@ namespace Fujify.Services
                             NativeLibrary.TryLoad(unwindPath, assembly, searchPath, out _);
                         }
 
-                        if (NativeLibrary.TryLoad(path, out IntPtr handle))
+                        if (NativeLibrary.TryLoad(path, out IntPtr handle) ||
+                            NativeLibrary.TryLoad(path, assembly, null, out handle))
                         {
                             return handle;
                         }

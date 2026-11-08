@@ -29,6 +29,10 @@
     <BundleResource Include="Resources\**\*" Exclude="Resources\LaunchScreen.storyboard" />
   </ItemGroup>
 
+  <ItemGroup Condition="Exists('Frameworks')">
+    <BundleResource Include="Frameworks\**\*.dylib" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Fujify\Fujify.csproj" Properties="OutputType=Library;TargetFramework=net10.0" />
   </ItemGroup>

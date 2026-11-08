@@ -87,6 +87,18 @@ if (-not $SkipAndroid) {
         $outputLibs = Join-Path $repoRoot "Fujify.Android\libs"
         & cargo ndk -t arm64-v8a -t x86_64 -P 26 -o $outputLibs --manifest-path (Join-Path $nativeDir "Cargo.toml") build --release
     }
+
+    # Ensure native raw2raf_ffi libraries are present
+    $arm64Raw2Raf = Join-Path $repoRoot "Fujify.Android\libs\arm64-v8a\libraw2raf_ffi.so"
+    $x64Raw2Raf = Join-Path $repoRoot "Fujify.Android\libs\x86_64\libraw2raf_ffi.so"
+    if (-not (Test-Path $arm64Raw2Raf) -or -not (Test-Path $x64Raw2Raf)) {
+        Write-Host "Building raw2raf_ffi native libraries for Android (arm64-v8a and x86_64)..." -ForegroundColor Cyan
+        $raw2rafDir = Join-Path $repoRoot "tools\Raw2Raf"
+        $outputLibs = Join-Path $repoRoot "Fujify.Android\libs"
+        Push-Location $raw2rafDir
+        & cargo ndk -t arm64-v8a -t x86_64 -P 26 -o $outputLibs build --release
+        Pop-Location
+    }
     
     # Detect release upload keystore if not explicitly provided
     if (-not $KeystorePath) {

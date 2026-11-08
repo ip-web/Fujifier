@@ -178,6 +178,35 @@ jobs:
       - name: Install iOS Workload
         run: dotnet workload install ios
 
+      - name: Build Native Rust Libraries for iOS (dnglab_ffi & raw2raf_ffi)
+        run: |
+          echo "=== Setting up Rust aarch64-apple-ios target ==="
+          rustup target add aarch64-apple-ios
+
+          echo "=== Building native dnglab_ffi for iOS ==="
+          cd native/dnglab_ffi
+          cargo build --release --target aarch64-apple-ios
+          cd ../..
+
+          echo "=== Building native raw2raf_ffi for iOS ==="
+          if [ ! -d "tools/Raw2Raf" ]; then
+            mkdir -p tools
+            git clone --depth 1 https://github.com/ip-web/Raw2Raf.git tools/Raw2Raf
+          fi
+          cd tools/Raw2Raf
+          cargo build --release --target aarch64-apple-ios
+          cd ../..
+
+          mkdir -p Fujify.iOS/Frameworks
+          if [ -f native/dnglab_ffi/target/aarch64-apple-ios/release/libdnglab_ffi.dylib ]; then
+            cp native/dnglab_ffi/target/aarch64-apple-ios/release/libdnglab_ffi.dylib Fujify.iOS/Frameworks/
+          fi
+          if [ -f tools/Raw2Raf/target/aarch64-apple-ios/release/libraw2raf_ffi.dylib ]; then
+            cp tools/Raw2Raf/target/aarch64-apple-ios/release/libraw2raf_ffi.dylib Fujify.iOS/Frameworks/
+          fi
+          echo "Frameworks contents:"
+          ls -la Fujify.iOS/Frameworks/
+
       - name: Restore iOS Project
         run: dotnet restore Fujify.iOS/Fujify.iOS.csproj
 
@@ -193,10 +222,21 @@ jobs:
           fi
           # Ensure static archives (.a) are removed from the .app bundle to prevent codesign / Sideloadly failures
           find "$APP_PATH" -name "*.a" -delete
+          # Bundle native dynamic libraries into .app bundle root and Frameworks
+          mkdir -p "$APP_PATH/Frameworks"
+          if [ -f native/dnglab_ffi/target/aarch64-apple-ios/release/libdnglab_ffi.dylib ]; then
+            cp native/dnglab_ffi/target/aarch64-apple-ios/release/libdnglab_ffi.dylib "$APP_PATH/Frameworks/"
+            cp native/dnglab_ffi/target/aarch64-apple-ios/release/libdnglab_ffi.dylib "$APP_PATH/"
+          fi
+          if [ -f tools/Raw2Raf/target/aarch64-apple-ios/release/libraw2raf_ffi.dylib ]; then
+            cp tools/Raw2Raf/target/aarch64-apple-ios/release/libraw2raf_ffi.dylib "$APP_PATH/Frameworks/"
+            cp tools/Raw2Raf/target/aarch64-apple-ios/release/libraw2raf_ffi.dylib "$APP_PATH/"
+          fi
           mkdir -p ./publish/Payload
           cp -R "$APP_PATH" ./publish/Payload/
           echo "Verifying app bundle contents:"
           ls -la ./publish/Payload/*.app/
+          ls -la ./publish/Payload/*.app/Frameworks/ || true
           file ./publish/Payload/*.app/Fujify.iOS || true
           cd ./publish
           zip -r -y Fujify-v2.0.0-iOS.ipa Payload

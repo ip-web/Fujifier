@@ -36,6 +36,12 @@ namespace Fujify.Services
         private const string LibraryName = "dnglab_ffi";
         private static readonly object _initLock = new();
         private static bool? _isAvailable;
+        private static string? _loadError;
+
+        /// <summary>
+        /// Gets the last error message encountered when attempting to load the native dnglab_ffi library.
+        /// </summary>
+        public static string? LoadError => _loadError;
 
         static DngLabNative()
         {
@@ -78,9 +84,10 @@ namespace Fujify.Services
                         IntPtr vPtr = dnglab_version();
                         _isAvailable = vPtr != IntPtr.Zero;
                     }
-                    catch
+                    catch (Exception ex)
                     {
                         _isAvailable = false;
+                        _loadError = ex.Message;
                     }
                     return _isAvailable.Value;
                 }

@@ -1479,6 +1479,46 @@ namespace Fujify.Tests
             }
         }
 
+        [Fact]
+        public void ShowFileErrorCommand_OpensMessageModal_WithErrorMessage()
+        {
+            var vm = new MainViewModel();
+            var fileItem = new Fujify.Models.FileItem
+            {
+                FilePath = @"C:\test\sample.arw",
+                Status = "Error: Native conversion library (raw2raf_ffi) is required on mobile platforms."
+            };
+
+            vm.ShowFileErrorCommand.Execute(fileItem);
+
+            Assert.True(vm.IsMessageModal);
+            Assert.True(vm.IsBottomSheetOpen);
+            Assert.Equal("Error: Native conversion library (raw2raf_ffi) is required on mobile platforms.", vm.ModalMessage);
+        }
+
+        [Fact]
+        public void Raw2RafNative_LoadError_IsAccessible()
+        {
+            // Verify LoadError property exists and does not throw
+            string? err = Raw2RafNative.LoadError;
+            // When available, err is null; when unavailable, err may contain the load exception
+            if (Raw2RafNative.IsAvailable)
+            {
+                Assert.Null(err);
+            }
+        }
+
+        [Fact]
+        public void DngLabNative_LoadError_IsAccessible()
+        {
+            // Verify LoadError property exists and does not throw
+            string? err = DngLabNative.LoadError;
+            if (DngLabNative.IsAvailable)
+            {
+                Assert.Null(err);
+            }
+        }
+
         #endregion
     }
 }

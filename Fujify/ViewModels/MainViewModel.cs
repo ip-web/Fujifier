@@ -276,6 +276,14 @@ namespace Fujify.ViewModels
             ConfirmModalActionCommand = new RelayCommand(() => ResolveConfirmation(true));
             CancelModalActionCommand = new RelayCommand(() => ResolveConfirmation(false));
 
+            ShowFileErrorCommand = new RelayCommand<FileItem>(item =>
+            {
+                if (item == null) return;
+                string title = LocalizationManager.Tr("StatusError");
+                string msg = !string.IsNullOrWhiteSpace(item.ErrorMessage) ? item.ErrorMessage : item.Status;
+                ShowMessageModal(title, msg, isSuccess: false);
+            });
+
             ViewFailureLogCommand = new RelayCommand(() =>
             {
                 string? logPath = LastFailureLogPath;
@@ -285,6 +293,20 @@ namespace Fujify.ViewModels
                 }
                 if (!string.IsNullOrEmpty(logPath) && File.Exists(logPath))
                 {
+                    if (OperatingSystem.IsIOS() || OperatingSystem.IsAndroid())
+                    {
+                        try
+                        {
+                            string logContent = File.ReadAllText(logPath);
+                            if (logContent.Length > 2000)
+                            {
+                                logContent = logContent.Substring(0, 2000) + "\n... (truncated)";
+                            }
+                            ShowMessageModal(LocalizationManager.Tr("ViewErrorLog"), logContent, isSuccess: false);
+                            return;
+                        }
+                        catch { }
+                    }
                     CrossPlatformLauncher.OpenPath(logPath);
                 }
             });
@@ -387,6 +409,7 @@ namespace Fujify.ViewModels
         public ICommand SetGridViewCommand { get; }
         public ICommand ShowPropertiesCommand { get; }
         public ICommand OpenOutputFolderCommand { get; }
+        public ICommand ShowFileErrorCommand { get; }
         public ICommand ViewFailureLogCommand { get; }
         public ICommand ClearOutputFolderCommand { get; }
         public ICommand OpenWithCommand { get; }
