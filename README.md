@@ -242,7 +242,6 @@ Contributions, bug reports, and feature requests are warmly welcomed!
 ## 📜 Credits & Acknowledgments
 
 Fujifier is built upon world-class open-source libraries:
-- **Phil Harvey** for the irreplaceable [ExifTool](https://exiftool.org/) (Perl Artistic License).
 - **The DNGLab Project** for [DNGLab](https://github.com/dnglab/dnglab) (LGPL v2.1).
 - **Avalonia UI** team for the cross-platform UI framework (MIT License).
 
