@@ -24,8 +24,8 @@ Each preset modifies **only the camera profile**.
 2. **Fujifilm Velvia - Vivid**: Rich, deep saturation with punchy contrast, vibrant greens and vivid blues. Ideal for landscapes.
 3. **Fujifilm ASTIA - Soft**: Soft tonality with vibrant color rendition. Flattering for portraits.
 4. **Fujifilm CLASSIC CHROME**: Subdued saturation and deep shadows for an editorial documentary film aesthetic.
-5. **Fujifilm PRO Neg. Hi**: Professional portrait negative film with slightly higher tonal contrast.
-6. **Fujifilm PRO Neg. Std**: Professional portrait negative film with soft gradations and subtle skin hues.
+5. **Fujifilm Pro Neg. Hi**: Professional portrait negative film with slightly higher tonal contrast.
+6. **Fujifilm Pro Neg. Std**: Professional portrait negative film with soft gradations and subtle skin hues.
 7. **Fujifilm Classic Neg.**: Nostalgic consumer color negative look (Fujicolor Superia) with hard contrast and chromatic shadows.
 8. **Fujifilm Nostalgic Neg.**: Amber/golden highlights with rich tones inspired by 1970s American color photography.
 9. **Fujifilm ETERNA - Cinema**: Understated color and soft contrast with rich shadow retention for motion picture aesthetic.

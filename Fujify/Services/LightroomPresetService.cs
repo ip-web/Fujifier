@@ -73,17 +73,17 @@ namespace Fujify.Services
             ),
             new(
                 Id: "pro_neg_hi",
-                DisplayName: "Fujifilm PRO Neg. Hi",
-                CameraProfile: "Camera PRO Neg. Hi",
-                FileName: "Fujifilm PRO Neg. Hi.xmp",
+                DisplayName: "Fujifilm Pro Neg. Hi",
+                CameraProfile: "Camera Pro Neg. Hi",
+                FileName: "Fujifilm Pro Neg. Hi.xmp",
                 Description: "Professional portrait negative film with slightly harder contrast.",
                 Uuid: "F0010001000040008000000000000005"
             ),
             new(
                 Id: "pro_neg_std",
-                DisplayName: "Fujifilm PRO Neg. Std",
-                CameraProfile: "Camera PRO Neg. Std",
-                FileName: "Fujifilm PRO Neg. Std.xmp",
+                DisplayName: "Fujifilm Pro Neg. Std",
+                CameraProfile: "Camera Pro Neg. Std",
+                FileName: "Fujifilm Pro Neg. Std.xmp",
                 Description: "Professional portrait negative film with soft contrast and delicate skin tones.",
                 Uuid: "F0010001000040008000000000000006"
             ),
@@ -145,7 +145,7 @@ namespace Fujify.Services
             new(
                 Id: "acros_ye",
                 DisplayName: "Fujifilm ACROS + Ye",
-                CameraProfile: "Camera ACROS+Ye",
+                CameraProfile: "Camera ACROS+Ye Filter",
                 FileName: "Fujifilm ACROS + Ye.xmp",
                 Description: "ACROS black & white with yellow filter, slightly boosting contrast and darkening skies.",
                 Uuid: "F0010001000040008000000000000013",
@@ -154,7 +154,7 @@ namespace Fujify.Services
             new(
                 Id: "acros_r",
                 DisplayName: "Fujifilm ACROS + R",
-                CameraProfile: "Camera ACROS+R",
+                CameraProfile: "Camera ACROS+R Filter",
                 FileName: "Fujifilm ACROS + R.xmp",
                 Description: "ACROS black & white with red filter, delivering dramatic sky darkening and high contrast.",
                 Uuid: "F0010001000040008000000000000014",
@@ -163,7 +163,7 @@ namespace Fujify.Services
             new(
                 Id: "acros_g",
                 DisplayName: "Fujifilm ACROS + G",
-                CameraProfile: "Camera ACROS+G",
+                CameraProfile: "Camera ACROS+G Filter",
                 FileName: "Fujifilm ACROS + G.xmp",
                 Description: "ACROS black & white with green filter, enhancing portrait skin tones and lips.",
                 Uuid: "F0010001000040008000000000000015",
@@ -181,7 +181,7 @@ namespace Fujify.Services
             new(
                 Id: "monochrome_ye",
                 DisplayName: "Fujifilm MONOCHROME + Ye",
-                CameraProfile: "Camera MONOCHROME+Ye",
+                CameraProfile: "Camera MONOCHROME+Ye Filter",
                 FileName: "Fujifilm MONOCHROME + Ye.xmp",
                 Description: "Monochrome simulation with yellow filter.",
                 Uuid: "F0010001000040008000000000000017",
@@ -190,7 +190,7 @@ namespace Fujify.Services
             new(
                 Id: "monochrome_r",
                 DisplayName: "Fujifilm MONOCHROME + R",
-                CameraProfile: "Camera MONOCHROME+R",
+                CameraProfile: "Camera MONOCHROME+R Filter",
                 FileName: "Fujifilm MONOCHROME + R.xmp",
                 Description: "Monochrome simulation with red filter.",
                 Uuid: "F0010001000040008000000000000018",
@@ -199,7 +199,7 @@ namespace Fujify.Services
             new(
                 Id: "monochrome_g",
                 DisplayName: "Fujifilm MONOCHROME + G",
-                CameraProfile: "Camera MONOCHROME+G",
+                CameraProfile: "Camera MONOCHROME+G Filter",
                 FileName: "Fujifilm MONOCHROME + G.xmp",
                 Description: "Monochrome simulation with green filter.",
                 Uuid: "F0010001000040008000000000000019",

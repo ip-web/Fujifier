@@ -18,7 +18,7 @@
    crs:ContactInfo="https://fujifier.cc"
    crs:Version="16.0"
    crs:ProcessVersion="15.4"
-   crs:CameraProfile="Camera ACROS+Ye"
+   crs:CameraProfile="Camera ACROS+Ye Filter"
    crs:HasSettings="True">
    <crs:Name>
     <rdf:Alt>

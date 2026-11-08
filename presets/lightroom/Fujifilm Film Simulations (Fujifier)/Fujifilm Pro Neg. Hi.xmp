@@ -4,7 +4,7 @@
     xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
    crs:PresetType="Normal"
    crs:Cluster="Fujifier"
-   crs:UUID="F0010001000040008000000000000006"
+   crs:UUID="F0010001000040008000000000000005"
    crs:SupportsAmount2="False"
    crs:SupportsAmount="False"
    crs:SupportsColor="True"
@@ -18,11 +18,11 @@
    crs:ContactInfo="https://fujifier.cc"
    crs:Version="16.0"
    crs:ProcessVersion="15.4"
-   crs:CameraProfile="Camera PRO Neg. Std"
+   crs:CameraProfile="Camera Pro Neg. Hi"
    crs:HasSettings="True">
    <crs:Name>
     <rdf:Alt>
-     <rdf:li xml:lang="x-default">Fujifilm PRO Neg. Std</rdf:li>
+     <rdf:li xml:lang="x-default">Fujifilm Pro Neg. Hi</rdf:li>
     </rdf:Alt>
    </crs:Name>
    <crs:ShortName>
@@ -42,7 +42,7 @@
    </crs:Group>
    <crs:Description>
     <rdf:Alt>
-     <rdf:li xml:lang="x-default">Applies Fujifilm PRO Neg. Std profile. Note: Photos must be converted with Fujifier beforehand.</rdf:li>
+     <rdf:li xml:lang="x-default">Applies Fujifilm Pro Neg. Hi profile. Note: Photos must be converted with Fujifier beforehand.</rdf:li>
     </rdf:Alt>
    </crs:Description>
    <crs:Look/>

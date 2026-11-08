@@ -182,6 +182,50 @@ namespace Fujify.Tests
             string content = reader.ReadToEnd();
             Assert.Contains("converted to DNG using Fujifier beforehand", content);
         }
+
+        [Fact]
+        public void LightroomPresetService_ProfileNames_MatchExactAdobeLightroomNaming()
+        {
+            var license = new MockLicenseService();
+            var service = new LightroomPresetService(license);
+
+            // Pro Neg variations must use Title Case 'Pro' (not all-caps 'PRO')
+            var proNegHi = service.Presets.First(p => p.Id == "pro_neg_hi");
+            Assert.Equal("Camera Pro Neg. Hi", proNegHi.CameraProfile);
+            Assert.Equal("Fujifilm Pro Neg. Hi.xmp", proNegHi.FileName);
+
+            var proNegStd = service.Presets.First(p => p.Id == "pro_neg_std");
+            Assert.Equal("Camera Pro Neg. Std", proNegStd.CameraProfile);
+            Assert.Equal("Fujifilm Pro Neg. Std.xmp", proNegStd.FileName);
+
+            // ACROS filtered variations must include "Filter" suffix
+            var acrosYe = service.Presets.First(p => p.Id == "acros_ye");
+            Assert.Equal("Camera ACROS+Ye Filter", acrosYe.CameraProfile);
+
+            var acrosR = service.Presets.First(p => p.Id == "acros_r");
+            Assert.Equal("Camera ACROS+R Filter", acrosR.CameraProfile);
+
+            var acrosG = service.Presets.First(p => p.Id == "acros_g");
+            Assert.Equal("Camera ACROS+G Filter", acrosG.CameraProfile);
+
+            // Standard ACROS without filter has no "Filter" suffix
+            var acros = service.Presets.First(p => p.Id == "acros");
+            Assert.Equal("Camera ACROS", acros.CameraProfile);
+
+            // MONOCHROME filtered variations must include "Filter" suffix
+            var monoYe = service.Presets.First(p => p.Id == "monochrome_ye");
+            Assert.Equal("Camera MONOCHROME+Ye Filter", monoYe.CameraProfile);
+
+            var monoR = service.Presets.First(p => p.Id == "monochrome_r");
+            Assert.Equal("Camera MONOCHROME+R Filter", monoR.CameraProfile);
+
+            var monoG = service.Presets.First(p => p.Id == "monochrome_g");
+            Assert.Equal("Camera MONOCHROME+G Filter", monoG.CameraProfile);
+
+            // Standard MONOCHROME without filter has no "Filter" suffix
+            var mono = service.Presets.First(p => p.Id == "monochrome");
+            Assert.Equal("Camera MONOCHROME", mono.CameraProfile);
+        }
     }
 }
 
