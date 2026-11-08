@@ -248,7 +248,7 @@ public partial class App : Application
             {
                 var quickVm = new QuickProcessViewModel(
                     InitialCommandLineArgs.Files,
-                    isProcessTo: InitialCommandLineArgs.Mode == Common.LaunchMode.ProcessTo,
+                    showOptions: InitialCommandLineArgs.Mode == Common.LaunchMode.ConvertWithOptions,
                     settingsService: settingsService,
                     licenseService: licenseService);
 

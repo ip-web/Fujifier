@@ -49,30 +49,21 @@ namespace Fujify.Common
 {
 
     public enum LaunchMode
-
     {
-
         Queue,
-
-        Process,
-
-        ProcessTo
-
+        ConvertPrevious,
+        ConvertWithOptions,
+        Process = ConvertPrevious,
+        ProcessTo = ConvertWithOptions
     }
 
-
-
     public class CommandLineArgs
-
     {
-
         public LaunchMode Mode { get; set; } = LaunchMode.Queue;
 
         public List<string> Files { get; set; } = new();
 
-
-
-        public bool IsQuickProcess => Mode == LaunchMode.Process || Mode == LaunchMode.ProcessTo;
+        public bool IsQuickProcess => Mode == LaunchMode.ConvertPrevious || Mode == LaunchMode.ConvertWithOptions;
 
 
 
@@ -244,23 +235,31 @@ namespace Fujify.Common
 
                 }
 
-                else if (arg.Equals("--process", StringComparison.OrdinalIgnoreCase) ||
+                else if (arg.Equals("--convert-previous", StringComparison.OrdinalIgnoreCase) ||
+
+                         arg.Equals("-cp", StringComparison.OrdinalIgnoreCase) ||
+
+                         arg.Equals("--process", StringComparison.OrdinalIgnoreCase) ||
 
                          arg.Equals("-p", StringComparison.OrdinalIgnoreCase))
 
                 {
 
-                    result.Mode = LaunchMode.Process;
+                    result.Mode = LaunchMode.ConvertPrevious;
 
                 }
 
-                else if (arg.Equals("--process-to", StringComparison.OrdinalIgnoreCase) ||
+                else if (arg.Equals("--convert-options", StringComparison.OrdinalIgnoreCase) ||
+
+                         arg.Equals("-co", StringComparison.OrdinalIgnoreCase) ||
+
+                         arg.Equals("--process-to", StringComparison.OrdinalIgnoreCase) ||
 
                          arg.Equals("-pt", StringComparison.OrdinalIgnoreCase))
 
                 {
 
-                    result.Mode = LaunchMode.ProcessTo;
+                    result.Mode = LaunchMode.ConvertWithOptions;
 
                 }
 

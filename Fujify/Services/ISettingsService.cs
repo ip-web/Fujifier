@@ -57,6 +57,7 @@ namespace Fujify.Services
         public string SubfolderSuffix { get; set; } = "-fujified";
         public string SubfolderCustomName { get; set; } = "Fujified";
         public bool AutoOpenOutputFolder { get; set; } = false;
+        public string? CustomOutputFolder { get; set; }
         public bool LosslessCompression { get; set; } = true;
         public bool EnableWindowsContextMenu { get; set; } = false;
         public bool ExportFailedConversionsLog { get; set; } = false;

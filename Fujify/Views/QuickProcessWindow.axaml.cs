@@ -34,14 +34,21 @@ namespace Fujify.Views
                 if (DataContext is QuickProcessViewModel vm)
                 {
                     vm.OwnerWindow = this;
-                    await vm.StartAsync();
+                    if (!vm.IsConfiguringOptions)
+                    {
+                        await vm.StartAsync();
+                    }
                 }
             };
         }
 
         private void Window_PointerPressed(object? sender, PointerPressedEventArgs e)
         {
-            if (e.Source is Button || (e.Source is Avalonia.Visual visual && visual.FindAncestorOfType<Button>() != null))
+            if (e.Source is Button or TextBox or ToggleSwitch ||
+                (e.Source is Avalonia.Visual visual &&
+                 (visual.FindAncestorOfType<Button>() != null ||
+                  visual.FindAncestorOfType<TextBox>() != null ||
+                  visual.FindAncestorOfType<ToggleSwitch>() != null)))
             {
                 return;
             }

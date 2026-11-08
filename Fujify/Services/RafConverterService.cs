@@ -237,17 +237,6 @@ namespace Fujify.Services
         {
             if (string.IsNullOrWhiteSpace(containerArg))
             {
-                // Check if any containers exist in the persistent containers directory
-                try
-                {
-                    string containerDir = GetContainersDirectory();
-                    if (Directory.Exists(containerDir))
-                    {
-                        return Directory.GetFiles(containerDir, "*.*", SearchOption.TopDirectoryOnly)
-                            .Any(f => f.EndsWith(".raf", StringComparison.OrdinalIgnoreCase));
-                    }
-                }
-                catch { }
                 return false;
             }
 
@@ -284,55 +273,36 @@ namespace Fujify.Services
 
         public static string ResolveContainerArgumentStatic(string? containerArg)
         {
-            var validPaths = new List<string>();
-
-            if (!string.IsNullOrWhiteSpace(containerArg))
+            if (string.IsNullOrWhiteSpace(containerArg))
             {
-                var parts = containerArg.Split(new[] { ';', '|', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                foreach (var rawPart in parts)
-                {
-                    string part = rawPart.Trim('\"', '\'', ' ');
-                    if (string.IsNullOrWhiteSpace(part)) continue;
-
-                    if (File.Exists(part) || Directory.Exists(part))
-                    {
-                        validPaths.Add(part);
-                    }
-                    else
-                    {
-                        // Check if file with same filename was saved to persistent Containers storage
-                        string fileName = Path.GetFileName(part);
-                        if (!string.IsNullOrWhiteSpace(fileName))
-                        {
-                            string persistentCandidate = Path.Combine(GetContainersDirectory(), fileName);
-                            if (File.Exists(persistentCandidate))
-                            {
-                                validPaths.Add(persistentCandidate);
-                            }
-                        }
-                    }
-                }
+                return string.Empty;
             }
 
-            // If no explicitly configured paths exist, search persistent Containers directory for any RAF files
-            if (validPaths.Count == 0)
-            {
-                try
-                {
-                    string containerDir = GetContainersDirectory();
-                    if (Directory.Exists(containerDir))
-                    {
-                        var foundFiles = Directory.GetFiles(containerDir, "*.*", SearchOption.TopDirectoryOnly)
-                            .Where(f => f.EndsWith(".raf", StringComparison.OrdinalIgnoreCase))
-                            .ToList();
+            var validPaths = new List<string>();
 
-                        foreach (var f in foundFiles)
+            var parts = containerArg.Split(new[] { ';', '|', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var rawPart in parts)
+            {
+                string part = rawPart.Trim('\"', '\'', ' ');
+                if (string.IsNullOrWhiteSpace(part)) continue;
+
+                if (File.Exists(part) || Directory.Exists(part))
+                {
+                    validPaths.Add(part);
+                }
+                else
+                {
+                    // Check if file with same filename was saved to persistent Containers storage
+                    string fileName = Path.GetFileName(part);
+                    if (!string.IsNullOrWhiteSpace(fileName))
+                    {
+                        string persistentCandidate = Path.Combine(GetContainersDirectory(), fileName);
+                        if (File.Exists(persistentCandidate))
                         {
-                            validPaths.Add(f);
+                            validPaths.Add(persistentCandidate);
                         }
                     }
                 }
-                catch { }
             }
 
             if (validPaths.Count > 0)
@@ -341,7 +311,7 @@ namespace Fujify.Services
             }
 
             // If containerArg was provided as mock or hypothetical path in testing, keep it so tests can assert arguments
-            return !string.IsNullOrWhiteSpace(containerArg) ? containerArg.Trim() : string.Empty;
+            return containerArg.Trim();
         }
 
         private static string BuildArguments(string inputRawPath, string outputRafPath, string containerArg, string? exiftoolPath)

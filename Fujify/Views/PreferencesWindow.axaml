@@ -359,10 +359,10 @@
                                     </StackPanel>
                                 </StackPanel>
 
-                                <Separator Height="1" Background="{DynamicResource AppEdgeBrush}" IsVisible="False"/>
+                                <Separator Height="1" Background="{DynamicResource AppEdgeBrush}" IsVisible="{Binding IsWindows}"/>
 
                                 <!-- Windows Explorer Context Menu -->
-                                <Grid ColumnDefinitions="*,Auto" IsVisible="False">
+                                <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsWindows}">
                                     <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2" Margin="0,0,12,0">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <TextBlock Text="{loc:Loc WindowsContextMenuTitle}" FontWeight="SemiBold" FontSize="12"

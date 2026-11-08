@@ -96,6 +96,7 @@ namespace Fujify.ViewModels
             _updateService = updateService ?? new UpdateService(_settingsService);
             _adService = adService ?? new AdService(_licenseService);
             _createBackup = _settingsService.Settings.BackupOriginalFile;
+            _outputFolderPath = _settingsService.Settings.CustomOutputFolder;
             Instance = this;
 
             void OnLicenseUpdated(LicenseStatus status)
@@ -2099,6 +2100,8 @@ namespace Fujify.ViewModels
                 }
                 if (SetProperty(ref _outputFolderPath, resolved))
                 {
+                    _settingsService.Settings.CustomOutputFolder = resolved;
+                    _settingsService.Save();
                     OnPropertyChanged(nameof(FormattedOutputFolderPath));
                     OnPropertyChanged(nameof(HasCustomOutputFolder));
                     OnPropertyChanged(nameof(OutputDestinationSummary));

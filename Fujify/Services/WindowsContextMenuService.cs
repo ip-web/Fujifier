@@ -76,7 +76,8 @@ namespace Fujify.Services
             try
             {
                 string exePath = GetExecutablePath();
-                using var key = Registry.CurrentUser.OpenSubKey(@"Software\Classes\SystemFileAssociations\.arw\shell\Fujifier\shell\01_queue\command");
+                using var key = Registry.CurrentUser.OpenSubKey(@"Software\Classes\SystemFileAssociations\.arw\shell\Fujifier\shell\01_convert_previous\command")
+                             ?? Registry.CurrentUser.OpenSubKey(@"Software\Classes\SystemFileAssociations\.arw\shell\Fujifier\shell\01_queue\command");
                 if (key != null)
                 {
                     var val = key.GetValue(null)?.ToString();
@@ -337,39 +338,34 @@ namespace Fujify.Services
         [SupportedOSPlatform("windows")]
         private static void PopulateSubCommands(RegistryKey shellKey, string exePath, string iconValue)
         {
-            // 1. Add to queue
-            using (var qKey = shellKey.CreateSubKey("01_queue", true))
+            // Remove any legacy subkeys from previous versions
+            string[] legacyKeys = new[] { "01_queue", "02_process", "03_processto" };
+            foreach (var leg in legacyKeys)
             {
-                if (qKey != null)
+                try { shellKey.DeleteSubKeyTree(leg, false); } catch { }
+            }
+
+            // 1. Convert with previous
+            using (var prevKey = shellKey.CreateSubKey("01_convert_previous", true))
+            {
+                if (prevKey != null)
                 {
-                    qKey.SetValue("MUIVerb", "Add to queue");
-                    qKey.SetValue("Icon", iconValue);
-                    using var cmd = qKey.CreateSubKey("command", true);
-                    cmd?.SetValue(null, $"\"{exePath}\" --queue \"%1\"");
+                    prevKey.SetValue("MUIVerb", "Convert with previous");
+                    prevKey.SetValue("Icon", iconValue);
+                    using var cmd = prevKey.CreateSubKey("command", true);
+                    cmd?.SetValue(null, $"\"{exePath}\" --convert-previous \"%1\"");
                 }
             }
 
-            // 2. Process with Fujifier (default config - quick conversion)
-            using (var pKey = shellKey.CreateSubKey("02_process", true))
+            // 2. Convert with options
+            using (var optKey = shellKey.CreateSubKey("02_convert_options", true))
             {
-                if (pKey != null)
+                if (optKey != null)
                 {
-                    pKey.SetValue("MUIVerb", "Process with Fujifier");
-                    pKey.SetValue("Icon", iconValue);
-                    using var cmd = pKey.CreateSubKey("command", true);
-                    cmd?.SetValue(null, $"\"{exePath}\" --process \"%1\"");
-                }
-            }
-
-            // 3. Process with Fujifier to... (specific destination folder)
-            using (var ptKey = shellKey.CreateSubKey("03_processto", true))
-            {
-                if (ptKey != null)
-                {
-                    ptKey.SetValue("MUIVerb", "Process with Fujifier to...");
-                    ptKey.SetValue("Icon", iconValue);
-                    using var cmd = ptKey.CreateSubKey("command", true);
-                    cmd?.SetValue(null, $"\"{exePath}\" --process-to \"%1\"");
+                    optKey.SetValue("MUIVerb", "Convert with options");
+                    optKey.SetValue("Icon", iconValue);
+                    using var cmd = optKey.CreateSubKey("command", true);
+                    cmd?.SetValue(null, $"\"{exePath}\" --convert-options \"%1\"");
                 }
             }
         }

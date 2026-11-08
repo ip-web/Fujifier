@@ -12,6 +12,10 @@ namespace Fujify.Tests
     public class ContextMenuAndCommandLineTests
     {
         [Theory]
+        [InlineData(new[] { "--convert-previous", "C:\\test\\photo.arw" }, LaunchMode.ConvertPrevious, "C:\\test\\photo.arw")]
+        [InlineData(new[] { "-cp", "C:\\test\\photo.arw" }, LaunchMode.ConvertPrevious, "C:\\test\\photo.arw")]
+        [InlineData(new[] { "--convert-options", "C:\\test\\photo.arw" }, LaunchMode.ConvertWithOptions, "C:\\test\\photo.arw")]
+        [InlineData(new[] { "-co", "C:\\test\\photo.arw" }, LaunchMode.ConvertWithOptions, "C:\\test\\photo.arw")]
         [InlineData(new[] { "--process", "C:\\test\\photo.arw" }, LaunchMode.Process, "C:\\test\\photo.arw")]
         [InlineData(new[] { "-p", "C:\\test\\photo.arw" }, LaunchMode.Process, "C:\\test\\photo.arw")]
         [InlineData(new[] { "--process-to", "C:\\test\\photo.arw" }, LaunchMode.ProcessTo, "C:\\test\\photo.arw")]
@@ -128,30 +132,24 @@ namespace Fujify.Tests
                 Assert.Null(parentKey.GetValue(null)); // Parent key (Default) must be unset for cascading menu to open
 
                 // Verify centralized menu key exists
-                using var centralizedKey = Registry.CurrentUser.OpenSubKey(@"Software\Classes\Fujifier.Menu\shell\01_queue");
+                using var centralizedKey = Registry.CurrentUser.OpenSubKey(@"Software\Classes\Fujifier.Menu\shell\01_convert_previous");
                 Assert.NotNull(centralizedKey);
 
                 // Verify direct extension key was removed to prevent collisions
                 using var directExtKey = Registry.CurrentUser.OpenSubKey(@"Software\Classes\.arw\shell\Fujifier");
                 Assert.Null(directExtKey);
 
-                // Verify 01_queue
-                using var qCmd = Registry.CurrentUser.OpenSubKey(@"Software\Classes\SystemFileAssociations\.arw\shell\Fujifier\shell\01_queue\command");
-                Assert.NotNull(qCmd);
-                string? qVal = qCmd.GetValue(null)?.ToString();
-                Assert.Contains("--queue", qVal);
+                // Verify 01_convert_previous
+                using var prevCmd = Registry.CurrentUser.OpenSubKey(@"Software\Classes\SystemFileAssociations\.arw\shell\Fujifier\shell\01_convert_previous\command");
+                Assert.NotNull(prevCmd);
+                string? prevVal = prevCmd.GetValue(null)?.ToString();
+                Assert.Contains("--convert-previous", prevVal);
 
-                // Verify 02_process
-                using var pCmd = Registry.CurrentUser.OpenSubKey(@"Software\Classes\SystemFileAssociations\.arw\shell\Fujifier\shell\02_process\command");
-                Assert.NotNull(pCmd);
-                string? pVal = pCmd.GetValue(null)?.ToString();
-                Assert.Contains("--process", pVal);
-
-                // Verify 03_processto
-                using var ptCmd = Registry.CurrentUser.OpenSubKey(@"Software\Classes\SystemFileAssociations\.arw\shell\Fujifier\shell\03_processto\command");
-                Assert.NotNull(ptCmd);
-                string? ptVal = ptCmd.GetValue(null)?.ToString();
-                Assert.Contains("--process-to", ptVal);
+                // Verify 02_convert_options
+                using var optCmd = Registry.CurrentUser.OpenSubKey(@"Software\Classes\SystemFileAssociations\.arw\shell\Fujifier\shell\02_convert_options\command");
+                Assert.NotNull(optCmd);
+                string? optVal = optCmd.GetValue(null)?.ToString();
+                Assert.Contains("--convert-options", optVal);
 
                 // Unregister and verify removal
                 bool unregResult = WindowsContextMenuService.UnregisterContextMenu();
@@ -519,6 +517,73 @@ namespace Fujify.Tests
             {
                 Environment.SetEnvironmentVariable("FUJIFIER_SIMULATE_MACOS", prevSim);
             }
+        }
+
+        [Fact]
+        public async Task QuickProcessViewModel_OptionsMode_ShouldManageOptionsAndSave()
+        {
+            var settings = new MockSettingsService();
+            settings.Settings.EnableCaptureOneMode = true;
+            settings.Settings.ConversionTargetMode = "Lightroom";
+            settings.Settings.BackupOriginalFile = true;
+            settings.Settings.CustomOutputFolder = null;
+
+            var vm = new ViewModels.QuickProcessViewModel(
+                initialFiles: new[] { "file1.arw", "file2.arw" },
+                showOptions: true,
+                settingsService: settings);
+
+            Assert.True(vm.IsConfiguringOptions);
+            Assert.True(vm.IsCaptureOneModeUnlocked);
+            Assert.False(vm.IsCaptureOneModeSelected);
+            Assert.True(vm.IsLightroomModeSelected);
+            Assert.False(vm.HasCustomOutputFolder);
+
+            // Switch to Capture One mode
+            vm.SelectCaptureOneModeCommand.Execute(null);
+            Assert.True(vm.IsCaptureOneModeSelected);
+            Assert.False(vm.IsLightroomModeSelected);
+
+            // Change custom output folder
+            vm.OutputFolderPath = @"C:\CustomExport";
+            Assert.True(vm.HasCustomOutputFolder);
+            Assert.Equal(@"C:\CustomExport", vm.FormattedOutputFolderPath);
+
+            // Change backup and suffix
+            vm.BackupOriginalFile = false;
+            vm.AppendSuffix = true;
+            vm.Suffix = "_fuji";
+
+            // Execute StartConversionCommand
+            await (vm.StartConversionCommand as CommunityToolkit.Mvvm.Input.IAsyncRelayCommand)!.ExecuteAsync(null);
+
+            // Options should now be false (progress view active)
+            Assert.False(vm.IsConfiguringOptions);
+
+            // Settings should be persisted
+            Assert.Equal("CaptureOne", settings.Settings.ConversionTargetMode);
+            Assert.Equal(@"C:\CustomExport", settings.Settings.CustomOutputFolder);
+            Assert.False(settings.Settings.BackupOriginalFile);
+            Assert.True(settings.Settings.AppendSuffix);
+            Assert.Equal("_fuji", settings.Settings.Suffix);
+        }
+
+        [Fact]
+        public void QuickProcessViewModel_ConvertWithPrevious_ShouldStartImmediatelyWithoutOptions()
+        {
+            var settings = new MockSettingsService();
+            settings.Settings.EnableCaptureOneMode = false;
+            settings.Settings.CustomOutputFolder = @"C:\SavedDir";
+
+            var vm = new ViewModels.QuickProcessViewModel(
+                initialFiles: new[] { "file1.arw" },
+                showOptions: false,
+                settingsService: settings);
+
+            Assert.False(vm.IsConfiguringOptions);
+            Assert.False(vm.IsCaptureOneModeUnlocked);
+            Assert.True(vm.HasCustomOutputFolder);
+            Assert.Equal(@"C:\SavedDir", vm.OutputFolderPath);
         }
     }
 }
