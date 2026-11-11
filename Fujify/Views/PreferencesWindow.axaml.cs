@@ -10,6 +10,7 @@ namespace Fujify.Views
         public PreferencesWindow()
         {
             InitializeComponent();
+            Common.NativeWindowHelper.ConfigureDialogWindow(this);
         }
 
         public PreferencesWindow(PreferencesViewModel viewModel) : this()

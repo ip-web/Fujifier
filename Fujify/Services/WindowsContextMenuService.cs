@@ -80,8 +80,8 @@ namespace Fujify.Services
                              ?? Registry.CurrentUser.OpenSubKey(@"Software\Classes\SystemFileAssociations\.arw\shell\Fujifier\shell\01_queue\command");
                 if (key != null)
                 {
-                    var val = key.GetValue(null)?.ToString();
-                    if (!string.IsNullOrWhiteSpace(val) && val.Contains(Path.GetFileName(exePath), StringComparison.OrdinalIgnoreCase))
+                    var cmdVal = key.GetValue(null)?.ToString();
+                    if (!string.IsNullOrWhiteSpace(cmdVal) && cmdVal.Contains(Path.GetFileName(exePath), StringComparison.OrdinalIgnoreCase))
                     {
                         return true;
                     }
@@ -212,22 +212,63 @@ namespace Fujify.Services
                 string exeName = Path.GetFileName(exePath);
 
                 Registry.CurrentUser.DeleteSubKeyTree($@"Software\Classes\Applications\{exeName}", throwOnMissingSubKey: false);
+                Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\Applications\Fujifier.exe", throwOnMissingSubKey: false);
+                Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\Applications\Fujify.exe", throwOnMissingSubKey: false);
                 Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\Fujifier.RAW", throwOnMissingSubKey: false);
+                Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\Fujify.RAW", throwOnMissingSubKey: false);
 
                 foreach (var ext in RawExtensions)
                 {
                     try
                     {
                         Registry.CurrentUser.DeleteSubKeyTree($@"Software\Classes\{ext}\OpenWithList\{exeName}", throwOnMissingSubKey: false);
+                        Registry.CurrentUser.DeleteSubKeyTree($@"Software\Classes\{ext}\OpenWithList\Fujifier.exe", throwOnMissingSubKey: false);
+                        Registry.CurrentUser.DeleteSubKeyTree($@"Software\Classes\{ext}\OpenWithList\Fujify.exe", throwOnMissingSubKey: false);
                         using var owp = Registry.CurrentUser.OpenSubKey($@"Software\Classes\{ext}\OpenWithProgids", true);
                         owp?.DeleteValue("Fujifier.RAW", throwOnMissingValue: false);
+                        owp?.DeleteValue("Fujify.RAW", throwOnMissingValue: false);
 
                         Registry.CurrentUser.DeleteSubKeyTree($@"Software\Classes\SystemFileAssociations\{ext}\OpenWithList\{exeName}", throwOnMissingSubKey: false);
+                        Registry.CurrentUser.DeleteSubKeyTree($@"Software\Classes\SystemFileAssociations\{ext}\OpenWithList\Fujifier.exe", throwOnMissingSubKey: false);
+                        Registry.CurrentUser.DeleteSubKeyTree($@"Software\Classes\SystemFileAssociations\{ext}\OpenWithList\Fujify.exe", throwOnMissingSubKey: false);
                         using var sfaOwp = Registry.CurrentUser.OpenSubKey($@"Software\Classes\SystemFileAssociations\{ext}\OpenWithProgids", true);
                         sfaOwp?.DeleteValue("Fujifier.RAW", throwOnMissingValue: false);
+                        sfaOwp?.DeleteValue("Fujify.RAW", throwOnMissingValue: false);
                     }
                     catch { }
                 }
+
+                // If running elevated (e.g. uninstaller), also clean up HKLM
+                try
+                {
+                    Registry.LocalMachine.DeleteSubKeyTree($@"Software\Classes\Applications\{exeName}", throwOnMissingSubKey: false);
+                    Registry.LocalMachine.DeleteSubKeyTree(@"Software\Classes\Applications\Fujifier.exe", throwOnMissingSubKey: false);
+                    Registry.LocalMachine.DeleteSubKeyTree(@"Software\Classes\Applications\Fujify.exe", throwOnMissingSubKey: false);
+                    Registry.LocalMachine.DeleteSubKeyTree(@"Software\Classes\Fujifier.RAW", throwOnMissingSubKey: false);
+                    Registry.LocalMachine.DeleteSubKeyTree(@"Software\Classes\Fujify.RAW", throwOnMissingSubKey: false);
+
+                    foreach (var ext in RawExtensions)
+                    {
+                        try
+                        {
+                            Registry.LocalMachine.DeleteSubKeyTree($@"Software\Classes\{ext}\OpenWithList\{exeName}", throwOnMissingSubKey: false);
+                            Registry.LocalMachine.DeleteSubKeyTree($@"Software\Classes\{ext}\OpenWithList\Fujifier.exe", throwOnMissingSubKey: false);
+                            Registry.LocalMachine.DeleteSubKeyTree($@"Software\Classes\{ext}\OpenWithList\Fujify.exe", throwOnMissingSubKey: false);
+                            using var owp = Registry.LocalMachine.OpenSubKey($@"Software\Classes\{ext}\OpenWithProgids", true);
+                            owp?.DeleteValue("Fujifier.RAW", throwOnMissingValue: false);
+                            owp?.DeleteValue("Fujify.RAW", throwOnMissingValue: false);
+
+                            Registry.LocalMachine.DeleteSubKeyTree($@"Software\Classes\SystemFileAssociations\{ext}\OpenWithList\{exeName}", throwOnMissingSubKey: false);
+                            Registry.LocalMachine.DeleteSubKeyTree($@"Software\Classes\SystemFileAssociations\{ext}\OpenWithList\Fujifier.exe", throwOnMissingSubKey: false);
+                            Registry.LocalMachine.DeleteSubKeyTree($@"Software\Classes\SystemFileAssociations\{ext}\OpenWithList\Fujify.exe", throwOnMissingSubKey: false);
+                            using var sfaOwp = Registry.LocalMachine.OpenSubKey($@"Software\Classes\SystemFileAssociations\{ext}\OpenWithProgids", true);
+                            sfaOwp?.DeleteValue("Fujifier.RAW", throwOnMissingValue: false);
+                            sfaOwp?.DeleteValue("Fujify.RAW", throwOnMissingValue: false);
+                        }
+                        catch { }
+                    }
+                }
+                catch { }
 
                 NotifyShell();
                 return true;
@@ -239,6 +280,16 @@ namespace Fujify.Services
             }
         }
 
+        public static string BuildAppliesToFilter()
+        {
+            var parts = new System.Collections.Generic.List<string>();
+            foreach (var ext in RawExtensions)
+            {
+                parts.Add($"System.FileExtension:={ext}");
+            }
+            return string.Join(" OR ", parts);
+        }
+
         public static bool RegisterContextMenu()
         {
             if (!OperatingSystem.IsWindows()) return false;
@@ -246,18 +297,19 @@ namespace Fujify.Services
             try
             {
                 string exePath = GetExecutablePath();
-                string iconValue = $"{exePath},0";
+                string iconValue = $"\"{exePath}\",0";
 
-                // 1. Create centralized cascading menu structure under HKCU\Software\Classes\Fujifier.Menu\shell
-                using (var menuShellKey = Registry.CurrentUser.CreateSubKey(@"Software\Classes\Fujifier.Menu\shell", true))
+                // 1. Clean up any stale * shell verb or centralized menu from previous versions to eliminate duplicate entries
+                try
                 {
-                    if (menuShellKey != null)
-                    {
-                        PopulateSubCommands(menuShellKey, exePath, iconValue);
-                    }
+                    Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\*\shell\" + VerbName, throwOnMissingSubKey: false);
+                    Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\*\shell\Fujify", throwOnMissingSubKey: false);
+                    Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\Fujifier.Menu", throwOnMissingSubKey: false);
+                    Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\Fujify.Menu", throwOnMissingSubKey: false);
                 }
+                catch { }
 
-                // 2. Register under SystemFileAssociations for all supported RAW extensions
+                // 2. Register under SystemFileAssociations for all supported RAW extensions with native inline cascading menus
                 foreach (var ext in RawExtensions)
                 {
                     // Clean any broken direct extension keys (e.g. HKCU\Software\Classes\.arw\shell\Fujifier)
@@ -266,6 +318,9 @@ namespace Fujify.Services
                     // Register proper SystemFileAssociations verb
                     RegisterSystemFileAssociationVerb(@"Software\Classes\SystemFileAssociations\" + ext, exePath, iconValue);
                 }
+
+                // 3. Ensure Explorer does not truncate context menu when selecting >15 files
+                EnsureMultipleInvokePromptMinimum();
 
                 NotifyShell();
                 return true;
@@ -285,12 +340,35 @@ namespace Fujify.Services
             {
                 // Remove centralized menu key
                 Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\Fujifier.Menu", throwOnMissingSubKey: false);
+                Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\Fujify.Menu", throwOnMissingSubKey: false);
+
+                // Remove * shell verb
+                Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\*\shell\" + VerbName, throwOnMissingSubKey: false);
+                Registry.CurrentUser.DeleteSubKeyTree(@"Software\Classes\*\shell\Fujify", throwOnMissingSubKey: false);
 
                 foreach (var ext in RawExtensions)
                 {
                     UnregisterExtensionVerb(@"Software\Classes\SystemFileAssociations\" + ext);
                     UnregisterExtensionVerb(@"Software\Classes\" + ext);
                 }
+
+                // If running elevated (e.g. uninstaller), also clean up HKLM
+                try
+                {
+                    Registry.LocalMachine.DeleteSubKeyTree(@"Software\Classes\Fujifier.Menu", throwOnMissingSubKey: false);
+                    Registry.LocalMachine.DeleteSubKeyTree(@"Software\Classes\Fujify.Menu", throwOnMissingSubKey: false);
+                    Registry.LocalMachine.DeleteSubKeyTree(@"Software\Classes\*\shell\" + VerbName, throwOnMissingSubKey: false);
+                    Registry.LocalMachine.DeleteSubKeyTree(@"Software\Classes\*\shell\Fujify", throwOnMissingSubKey: false);
+
+                    foreach (var ext in RawExtensions)
+                    {
+                        Registry.LocalMachine.DeleteSubKeyTree($@"Software\Classes\SystemFileAssociations\{ext}\shell\{VerbName}", throwOnMissingSubKey: false);
+                        Registry.LocalMachine.DeleteSubKeyTree($@"Software\Classes\SystemFileAssociations\{ext}\shell\Fujify", throwOnMissingSubKey: false);
+                        Registry.LocalMachine.DeleteSubKeyTree($@"Software\Classes\{ext}\shell\{VerbName}", throwOnMissingSubKey: false);
+                        Registry.LocalMachine.DeleteSubKeyTree($@"Software\Classes\{ext}\shell\Fujify", throwOnMissingSubKey: false);
+                    }
+                }
+                catch { }
 
                 NotifyShell();
                 return true;
@@ -299,6 +377,27 @@ namespace Fujify.Services
             {
                 Debug.WriteLine($"[WindowsContextMenuService] Error unregistering context menu: {ex.Message}");
                 return false;
+            }
+        }
+
+        [SupportedOSPlatform("windows")]
+        private static void EnsureMultipleInvokePromptMinimum()
+        {
+            try
+            {
+                using var expKey = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer", true);
+                if (expKey != null)
+                {
+                    var current = expKey.GetValue("MultipleInvokePromptMinimum");
+                    if (current == null || (current is int val && val < 1000))
+                    {
+                        expKey.SetValue("MultipleInvokePromptMinimum", 1000, RegistryValueKind.DWord);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WindowsContextMenuService] Could not set MultipleInvokePromptMinimum: {ex.Message}");
             }
         }
 
@@ -318,14 +417,12 @@ namespace Fujify.Services
                     // Setting (Default) causes Explorer to treat the key as a direct command instead of a cascading submenu container.
                     verbKey.SetValue("MUIVerb", MenuText);
                     verbKey.SetValue("Icon", iconValue);
-                    verbKey.SetValue("ExtendedSubCommandsKey", "Fujifier.Menu");
                     verbKey.SetValue("SubCommands", string.Empty);
 
-                    // Also populate local shell subkey for dual-compatibility with shell handlers
-                    using var shellKey = verbKey.CreateSubKey("shell", true);
-                    if (shellKey != null)
+                    using var shellSubKey = verbKey.CreateSubKey("shell", true);
+                    if (shellSubKey != null)
                     {
-                        PopulateSubCommands(shellKey, exePath, iconValue);
+                        PopulateSubCommands(shellSubKey, exePath, iconValue);
                     }
                 }
             }

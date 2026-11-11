@@ -82,7 +82,10 @@ Options:
       --no-embed-raw          Do not embed original RAW data (default, smaller size)
       --lossless              Use lossless DNG compression (default)
       --uncompressed          Produce uncompressed DNG files
+      --verify, --verify-integrity Test file integrity after conversion
       --silent, --quiet       Suppress progress output
+      --register-context-menu Register Explorer context menu and Open With associations
+      --unregister-context-menu Remove Explorer context menu and Open With associations
 
 Examples:
   # Convert a photo in CLI mode using default X-T5 profile:
@@ -104,7 +107,7 @@ Supported RAW formats:
 
         public static void PrintVersion()
         {
-            var version = typeof(CliRunner).Assembly.GetName().Version?.ToString(3) ?? "2.3.0";
+            var version = typeof(CliRunner).Assembly.GetName().Version?.ToString(3) ?? "2.2.0";
             Console.WriteLine($"Fujifier {version}");
         }
 
@@ -183,6 +186,34 @@ Supported RAW formats:
 
         public static int Run(CommandLineArgs args)
         {
+            if (args.UnregisterContextMenu)
+            {
+                if (OperatingSystem.IsWindows())
+                {
+                    WindowsContextMenuService.UnregisterContextMenu();
+                    WindowsContextMenuService.UnregisterOpenWith();
+                }
+                else if (OperatingSystem.IsMacOS())
+                {
+                    MacQuickActionService.UnregisterQuickActions();
+                }
+                return 0;
+            }
+
+            if (args.RegisterContextMenu)
+            {
+                if (OperatingSystem.IsWindows())
+                {
+                    WindowsContextMenuService.RegisterContextMenu();
+                    WindowsContextMenuService.RegisterOpenWith();
+                }
+                else if (OperatingSystem.IsMacOS())
+                {
+                    MacQuickActionService.RegisterQuickActions();
+                }
+                return 0;
+            }
+
             if (args.ShowHelp)
             {
                 PrintHelp();
@@ -218,6 +249,7 @@ Supported RAW formats:
             var rawConverter = new RawConverterService();
             var metadataService = new MetadataService();
             var presetService = new LightroomPresetService();
+            var fileIntegrityService = new FileIntegrityService();
 
             string cameraModel = !string.IsNullOrWhiteSpace(args.CameraModel) ? args.CameraModel : "Fujifilm X-T5";
             string? outDir = args.OutputDirectory;
@@ -302,16 +334,18 @@ Supported RAW formats:
                         targetDngPath = Path.ChangeExtension(file, ".dng");
                     }
 
-                    string? tempCreatedDng = null;
                     string dngToInject = file;
 
-                    // 1. If not DNG, convert to DNG first into a temporary intermediate file
+                    // 1. If not DNG, convert directly to targetDngPath
                     if (!isOriginallyDng)
                     {
-                        string workDir = !string.IsNullOrEmpty(outDir) ? outDir : (Path.GetDirectoryName(file) ?? ".");
-                        tempCreatedDng = Path.Combine(workDir, $"{Path.GetFileNameWithoutExtension(file)}_tmp_{Guid.NewGuid():N}.dng");
+                        string? destDir = Path.GetDirectoryName(targetDngPath);
+                        if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
+                        {
+                            Directory.CreateDirectory(destDir);
+                        }
 
-                        var convResult = rawConverter.ConvertToDng(file, args.EmbedOriginalRaw, tempCreatedDng, args.LosslessCompression);
+                        var convResult = rawConverter.ConvertToDng(file, args.EmbedOriginalRaw, targetDngPath, args.LosslessCompression);
                         if (!convResult.Success || string.IsNullOrEmpty(convResult.OutputDngPath) || !File.Exists(convResult.OutputDngPath))
                         {
                             throw new Exception(convResult.ErrorMessage ?? "RAW to DNG conversion failed.");
@@ -333,18 +367,30 @@ Supported RAW formats:
                         targetUniqueCameraModel: cameraModel,
                         sourceRawFilePath: file);
 
-                    // Clean up temporary intermediate conversion file if used
-                    if (!string.IsNullOrEmpty(tempCreatedDng) && File.Exists(tempCreatedDng))
-                    {
-                        try { File.Delete(tempCreatedDng); } catch { }
-                    }
-
                     if (!metaResult.Success)
                     {
+                        if (!isOriginallyDng && File.Exists(targetDngPath))
+                        {
+                            try { File.Delete(targetDngPath); } catch { }
+                        }
                         throw new Exception(metaResult.ErrorMessage ?? "Fujifilm metadata injection failed.");
                     }
 
                     string finalCustomOut = targetDngPath;
+
+                    // 2.5 Verify file integrity if requested
+                    if (args.VerifyFileIntegrity)
+                    {
+                        var integrity = fileIntegrityService.VerifyIntegrity(finalCustomOut);
+                        if (!integrity.IsValid)
+                        {
+                            if (!isOriginallyDng && File.Exists(targetDngPath))
+                            {
+                                try { File.Delete(targetDngPath); } catch { }
+                            }
+                            throw new Exception($"File integrity check failed: {integrity.ErrorMessage}");
+                        }
+                    }
 
                     // 3. If film simulation was specified, generate and write sidecar XMP
                     if (selectedPreset != null)

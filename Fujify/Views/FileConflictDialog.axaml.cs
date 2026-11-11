@@ -13,6 +13,7 @@ namespace Fujify.Views
         public FileConflictDialog()
         {
             InitializeComponent();
+            Common.NativeWindowHelper.ConfigureDialogWindow(this);
         }
 
         public FileConflictDialog(FileConflictDialogViewModel viewModel) : this()

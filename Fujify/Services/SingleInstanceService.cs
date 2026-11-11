@@ -53,17 +53,21 @@ namespace Fujify.Services
         public static string GetPipeName(string channel = ChannelMain)
         {
             string user = Environment.UserName.Replace("\\", "_").Replace("/", "_");
-            return channel.Equals(ChannelQuick, StringComparison.OrdinalIgnoreCase)
-                ? $"Fujifier_QuickProcess_Pipe_{user}"
-                : $"Fujifier_IPC_Pipe_{user}";
+            if (channel.Equals(ChannelQuick, StringComparison.OrdinalIgnoreCase))
+                return $"Fujifier_QuickProcess_Pipe_{user}";
+            if (channel.Equals(ChannelMain, StringComparison.OrdinalIgnoreCase))
+                return $"Fujifier_IPC_Pipe_{user}";
+            return $"Fujifier_Pipe_{channel}_{user}";
         }
 
         public static string GetMutexName(string channel = ChannelMain)
         {
             string user = Environment.UserName.Replace("\\", "_").Replace("/", "_");
-            return channel.Equals(ChannelQuick, StringComparison.OrdinalIgnoreCase)
-                ? $"Fujifier_QuickProcess_Mutex_{user}"
-                : $"Fujifier_SingleInstance_Mutex_{user}";
+            if (channel.Equals(ChannelQuick, StringComparison.OrdinalIgnoreCase))
+                return $"Fujifier_QuickProcess_Mutex_{user}";
+            if (channel.Equals(ChannelMain, StringComparison.OrdinalIgnoreCase))
+                return $"Fujifier_SingleInstance_Mutex_{user}";
+            return $"Fujifier_Mutex_{channel}_{user}";
         }
 
         /// <summary>
@@ -95,30 +99,41 @@ namespace Fujify.Services
 
         /// <summary>
         /// Sends an IPC payload to the running primary instance of the specified channel via Named Pipe.
+        /// Retries with backoff up to timeoutMs to handle high concurrency during Windows Explorer batch launches.
         /// </summary>
-        public static bool SendPayloadToExistingInstance(IpcPayload payload, string channel = ChannelMain, int timeoutMs = 3500)
+        public static bool SendPayloadToExistingInstance(IpcPayload payload, string channel = ChannelMain, int timeoutMs = 6000)
         {
-            try
+            var sw = Stopwatch.StartNew();
+            int attempt = 0;
+            while (sw.ElapsedMilliseconds < timeoutMs)
             {
-                using var pipeClient = new NamedPipeClientStream(".", GetPipeName(channel), PipeDirection.Out);
-                pipeClient.Connect(timeoutMs);
+                attempt++;
+                try
+                {
+                    using var pipeClient = new NamedPipeClientStream(".", GetPipeName(channel), PipeDirection.Out);
+                    int remaining = (int)Math.Max(100, timeoutMs - sw.ElapsedMilliseconds);
+                    pipeClient.Connect(remaining);
 
-                using var writer = new StreamWriter(pipeClient, Encoding.UTF8) { AutoFlush = true };
-                string json = JsonSerializer.Serialize(payload ?? new IpcPayload());
-                writer.WriteLine(json);
-                return true;
+                    using var writer = new StreamWriter(pipeClient, Encoding.UTF8) { AutoFlush = true };
+                    string json = JsonSerializer.Serialize(payload ?? new IpcPayload());
+                    writer.WriteLine(json);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[SingleInstanceService] Attempt {attempt} failed on channel '{channel}': {ex.Message}");
+                    int remaining = (int)(timeoutMs - sw.ElapsedMilliseconds);
+                    if (remaining <= 0) break;
+                    Thread.Sleep(Math.Min(remaining, 50));
+                }
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[SingleInstanceService] Failed to send payload to primary instance ({channel}): {ex.Message}");
-                return false;
-            }
+            return false;
         }
 
         /// <summary>
         /// Backwards-compatible overload: parses command-line args and forwards them to the appropriate channel.
         /// </summary>
-        public static bool SendArgsToExistingInstance(string[] args, int timeoutMs = 3500)
+        public static bool SendArgsToExistingInstance(string[] args, int timeoutMs = 6000)
         {
             var parsed = CommandLineArgs.Parse(args);
             string channel = parsed.IsQuickProcess ? ChannelQuick : ChannelMain;
@@ -162,11 +177,34 @@ namespace Fujify.Services
         {
             string pipeName = GetPipeName(channel);
 
+            // Maintain concurrent listening instances so simultaneous clients never face an accept gap
+            const int concurrentListeners = 4;
+            var listenerTasks = new List<Task>();
+
+            for (int i = 0; i < concurrentListeners; i++)
+            {
+                listenerTasks.Add(RunSingleListenerLoopAsync(pipeName, channel, token));
+            }
+
+            try
+            {
+                await Task.WhenAll(listenerTasks);
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[SingleInstanceService] Listener group error on channel '{channel}': {ex.Message}");
+            }
+        }
+
+        private static async Task RunSingleListenerLoopAsync(string pipeName, string channel, CancellationToken token)
+        {
             while (!token.IsCancellationRequested)
             {
+                NamedPipeServerStream? server = null;
                 try
                 {
-                    var server = new NamedPipeServerStream(
+                    server = new NamedPipeServerStream(
                         pipeName,
                         PipeDirection.In,
                         NamedPipeServerStream.MaxAllowedServerInstances,
@@ -175,11 +213,14 @@ namespace Fujify.Services
 
                     await server.WaitForConnectionAsync(token);
 
+                    var connectedServer = server;
+                    server = null; // Ownership transferred to consumer task
+
                     // Process client connection asynchronously
                     _ = Task.Run(async () =>
                     {
-                        using (server)
-                        using (var reader = new StreamReader(server, Encoding.UTF8))
+                        using (connectedServer)
+                        using (var reader = new StreamReader(connectedServer, Encoding.UTF8))
                         {
                             try
                             {
@@ -224,12 +265,16 @@ namespace Fujify.Services
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"[SingleInstanceService] Server accept loop error on channel '{channel}': {ex.Message}");
+                    Debug.WriteLine($"[SingleInstanceService] Single listener error on channel '{channel}': {ex.Message}");
                     try
                     {
-                        await Task.Delay(100, token);
+                        await Task.Delay(50, token);
                     }
                     catch { break; }
+                }
+                finally
+                {
+                    server?.Dispose();
                 }
             }
         }

@@ -59,6 +59,7 @@ namespace Fujify.Services
         public bool AutoOpenOutputFolder { get; set; } = false;
         public string? CustomOutputFolder { get; set; }
         public bool LosslessCompression { get; set; } = true;
+        public bool VerifyFileIntegrity { get; set; } = false;
         public bool EnableWindowsContextMenu { get; set; } = false;
         public bool ExportFailedConversionsLog { get; set; } = false;
         public string? LicenseKey { get; set; }

@@ -11,19 +11,13 @@
         WindowStartupLocation="CenterScreen"
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaTitleBarHeightHint="0"
-        WindowDecorations="None"
-        TransparencyLevelHint="Transparent"
-        Background="Transparent"
+        WindowDecorations="BorderOnly"
+        Background="{DynamicResource AppSurfaceBrush}"
         Icon="/Assets/images/logo.ico">
 
     <!-- Standalone Dialog Card Block -->
     <Border Classes="dialog-card"
-            Background="{DynamicResource AppSurfaceBrush}"
-            BorderBrush="{DynamicResource AppEdgeBrush}"
-            BorderThickness="1"
-            CornerRadius="16"
             Padding="22"
-            ClipToBounds="True"
             PointerPressed="Window_PointerPressed">
         <Grid>
             <!-- 1. OPTIONS VIEW (Shown in 'Convert with options' mode) -->
@@ -172,6 +166,13 @@
                                 <ToggleSwitch Grid.Column="1" IsChecked="{Binding BackupOriginalFile}" OnContent="" OffContent=""/>
                             </Grid>
 
+                            <!-- Verify Integrity Switch -->
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="{loc:Loc VerifyFileIntegrity}" FontSize="11"
+                                           Foreground="{DynamicResource AppTextPrimaryBrush}" VerticalAlignment="Center"/>
+                                <ToggleSwitch Grid.Column="1" IsChecked="{Binding VerifyFileIntegrity}" OnContent="" OffContent=""/>
+                            </Grid>
+
                             <!-- Suffix Switch -->
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBlock Grid.Column="0" Text="{loc:Loc AddFilenameSuffix}" FontSize="11"
@@ -232,13 +233,6 @@
                                            FontSize="9" Foreground="{DynamicResource AppAccentLightBrush}"
                                            TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
-
-                            <!-- Open in Lightroom Switch (when Lightroom mode is active) -->
-                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding ShowOpenInLightroom}">
-                                <TextBlock Grid.Column="0" Text="{loc:Loc OpenInLightroom}" FontSize="11"
-                                           Foreground="{DynamicResource AppTextPrimaryBrush}" VerticalAlignment="Center"/>
-                                <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoOpenInLightroom}" OnContent="" OffContent=""/>
-                            </Grid>
 
                             <!-- Open in Capture One Switch (when Capture One mode is active) -->
                             <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding ShowOpenInCaptureOne}">

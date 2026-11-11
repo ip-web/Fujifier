@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using Fujify.Services;
+using Fujify.ViewModels;
 using Xunit;
 
 namespace Fujify.Tests
@@ -213,6 +214,51 @@ namespace Fujify.Tests
                 Assert.Equal("zh", service.Settings.Language);
                 Assert.Equal("Amoled", service.Settings.ThemeMode);
                 Assert.False(service.Settings.BackupOriginalFile);
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            }
+        }
+
+        [Fact]
+        public void PreferencesViewModel_SidebarTabs_SwitchSectionsCorrectly()
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), $"prefs_test_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempDir);
+            try
+            {
+                var settingsService = new SettingsService(Path.Combine(tempDir, "settings.json"));
+                var vm = new PreferencesViewModel(settingsService);
+
+                Assert.Equal(PreferencesTab.General, vm.SelectedTab);
+                Assert.True(vm.IsGeneralTabSelected);
+                Assert.False(vm.IsPerformanceTabSelected);
+
+                vm.SelectPerformanceTabCommand.Execute(null);
+                Assert.Equal(PreferencesTab.Performance, vm.SelectedTab);
+                Assert.True(vm.IsPerformanceTabSelected);
+                Assert.False(vm.IsGeneralTabSelected);
+
+                vm.SelectFileHandlingTabCommand.Execute(null);
+                Assert.Equal(PreferencesTab.FileHandling, vm.SelectedTab);
+                Assert.True(vm.IsFileHandlingTabSelected);
+
+                vm.SelectExperimentalTabCommand.Execute(null);
+                Assert.Equal(PreferencesTab.Experimental, vm.SelectedTab);
+                Assert.True(vm.IsExperimentalTabSelected);
+
+                vm.SelectLicenseTabCommand.Execute(null);
+                Assert.Equal(PreferencesTab.License, vm.SelectedTab);
+                Assert.True(vm.IsLicenseTabSelected);
+
+                vm.SelectUpdatesTabCommand.Execute(null);
+                Assert.Equal(PreferencesTab.Updates, vm.SelectedTab);
+                Assert.True(vm.IsUpdatesTabSelected);
+
+                vm.SelectGeneralTabCommand.Execute(null);
+                Assert.Equal(PreferencesTab.General, vm.SelectedTab);
+                Assert.True(vm.IsGeneralTabSelected);
             }
             finally
             {

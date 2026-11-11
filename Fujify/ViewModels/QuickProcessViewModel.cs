@@ -44,6 +44,7 @@ namespace Fujify.ViewModels
         private readonly IDialogService _dialogService;
         private readonly ISettingsService _settingsService;
         private readonly ILicenseService _licenseService;
+        private readonly IFileIntegrityService _fileIntegrityService;
 
         public bool IsPro => _licenseService.IsPro;
 
@@ -62,13 +63,13 @@ namespace Fujify.ViewModels
         private bool _isCaptureOneModeSelected;
         private string? _outputFolderPath;
         private bool _backupOriginalFile;
+        private bool _verifyFileIntegrity;
         private bool _appendSuffix;
         private string _suffix = "-fujified";
         private bool _createSubfolder;
         private bool _subfolderUseOriginalName = true;
         private string _subfolderSuffix = "-fujified";
         private string _subfolderCustomName = "Fujified";
-        private bool _autoOpenInLightroom;
         private bool _autoOpenInCaptureOne;
 
         // Progress properties
@@ -102,7 +103,6 @@ namespace Fujify.ViewModels
                 if (SetProperty(ref _isCaptureOneModeSelected, value))
                 {
                     OnPropertyChanged(nameof(IsLightroomModeSelected));
-                    OnPropertyChanged(nameof(ShowOpenInLightroom));
                     OnPropertyChanged(nameof(ShowOpenInCaptureOne));
                 }
             }
@@ -119,6 +119,7 @@ namespace Fujify.ViewModels
                 {
                     OnPropertyChanged(nameof(FormattedOutputFolderPath));
                     OnPropertyChanged(nameof(HasCustomOutputFolder));
+                    OnPropertyChanged(nameof(SubfolderPreview));
                 }
             }
         }
@@ -136,6 +137,12 @@ namespace Fujify.ViewModels
             set => SetProperty(ref _backupOriginalFile, value);
         }
 
+        public bool VerifyFileIntegrity
+        {
+            get => _verifyFileIntegrity;
+            set => SetProperty(ref _verifyFileIntegrity, value);
+        }
+
         public bool AppendSuffix
         {
             get => _appendSuffix;
@@ -151,7 +158,13 @@ namespace Fujify.ViewModels
         public bool CreateSubfolder
         {
             get => _createSubfolder;
-            set => SetProperty(ref _createSubfolder, value);
+            set
+            {
+                if (SetProperty(ref _createSubfolder, value))
+                {
+                    OnPropertyChanged(nameof(SubfolderPreview));
+                }
+            }
         }
 
         public bool SubfolderUseOriginalName
@@ -190,19 +203,49 @@ namespace Fujify.ViewModels
             }
         }
 
+        private string GetEffectiveBaseFolderName()
+        {
+            if (!string.IsNullOrWhiteSpace(_outputFolderPath))
+            {
+                var name = Path.GetFileName(_outputFolderPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    return name;
+                }
+            }
+
+            string? firstFile = null;
+            lock (_allFiles)
+            {
+                firstFile = _allFiles.FirstOrDefault();
+            }
+            if (string.IsNullOrWhiteSpace(firstFile) && _incomingQueue.TryPeek(out var queued))
+            {
+                firstFile = queued;
+            }
+
+            if (!string.IsNullOrWhiteSpace(firstFile))
+            {
+                var dir = Path.GetDirectoryName(firstFile);
+                if (!string.IsNullOrWhiteSpace(dir))
+                {
+                    var name = Path.GetFileName(dir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                    if (!string.IsNullOrWhiteSpace(name))
+                    {
+                        return name;
+                    }
+                }
+            }
+
+            return "Photos";
+        }
+
         public string SubfolderPreview =>
             _subfolderUseOriginalName
-                ? $"Photos{_subfolderSuffix}"
-                : _subfolderCustomName;
+                ? $"{GetEffectiveBaseFolderName()}{_subfolderSuffix}"
+                : (string.IsNullOrWhiteSpace(_subfolderCustomName) ? "Fujified" : _subfolderCustomName);
 
-        public bool ShowOpenInLightroom => !IsCaptureOneModeSelected;
         public bool ShowOpenInCaptureOne => IsCaptureOneModeSelected;
-
-        public bool AutoOpenInLightroom
-        {
-            get => _autoOpenInLightroom;
-            set => SetProperty(ref _autoOpenInLightroom, value);
-        }
 
         public bool AutoOpenInCaptureOne
         {
@@ -214,7 +257,11 @@ namespace Fujify.ViewModels
         {
             get
             {
-                int count = _allFiles.Count + _incomingQueue.Count;
+                int count;
+                lock (_allFiles)
+                {
+                    count = _allFiles.Count + _incomingQueue.Count;
+                }
                 if (count == 0) return "No files selected";
                 return count == 1 ? "1 photo selected" : $"{count} photos selected";
             }
@@ -305,7 +352,8 @@ namespace Fujify.ViewModels
             IMetadataService? metadataService = null,
             IDialogService? dialogService = null,
             ISettingsService? settingsService = null,
-            ILicenseService? licenseService = null)
+            ILicenseService? licenseService = null,
+            IFileIntegrityService? fileIntegrityService = null)
         {
             _isConfiguringOptions = showOptions;
             _rawConverterService = rawConverterService ?? new RawConverterService();
@@ -314,19 +362,20 @@ namespace Fujify.ViewModels
             _settingsService = settingsService ?? new SettingsService();
             _licenseService = licenseService ?? LicenseService.Instance ?? new LicenseService(_settingsService);
             _dialogService = dialogService ?? new DialogService(_settingsService, _licenseService);
+            _fileIntegrityService = fileIntegrityService ?? new FileIntegrityService();
 
             // Load from previous settings saved in app
             var s = _settingsService.Settings;
             _isCaptureOneModeSelected = s.EnableCaptureOneMode && string.Equals(s.ConversionTargetMode, "CaptureOne", StringComparison.OrdinalIgnoreCase);
             _outputFolderPath = s.CustomOutputFolder;
             _backupOriginalFile = s.BackupOriginalFile;
+            _verifyFileIntegrity = s.VerifyFileIntegrity;
             _appendSuffix = s.AppendSuffix;
             _suffix = string.IsNullOrWhiteSpace(s.Suffix) ? "-fujified" : s.Suffix;
             _createSubfolder = s.CreateSubfolder;
             _subfolderUseOriginalName = s.SubfolderUseOriginalName;
             _subfolderSuffix = string.IsNullOrWhiteSpace(s.SubfolderSuffix) ? "-fujified" : s.SubfolderSuffix;
             _subfolderCustomName = string.IsNullOrWhiteSpace(s.SubfolderCustomName) ? "Fujified" : s.SubfolderCustomName;
-            _autoOpenInLightroom = s.AutoOpenInLightroom;
             _autoOpenInCaptureOne = s.AutoOpenInCaptureOne;
 
             // Initialize Commands
@@ -364,18 +413,31 @@ namespace Fujify.ViewModels
                 }
             }
             DrainIncomingQueue();
+
+            // If processing already completed, restart conversion for late-arriving files
+            if (_isCompleted && !_isConfiguringOptions)
+            {
+                _started = false;
+                _isCompleted = false;
+                _isProcessing = true;
+                _ = StartAsync();
+            }
         }
 
         private void DrainIncomingQueue()
         {
-            while (_incomingQueue.TryDequeue(out var f))
+            lock (_allFiles)
             {
-                if (File.Exists(f) && !_allFiles.Contains(f, StringComparer.OrdinalIgnoreCase))
+                while (_incomingQueue.TryDequeue(out var f))
                 {
-                    _allFiles.Add(f);
+                    if (File.Exists(f) && !_allFiles.Contains(f, StringComparer.OrdinalIgnoreCase))
+                    {
+                        _allFiles.Add(f);
+                    }
                 }
             }
             OnPropertyChanged(nameof(FilesSummaryText));
+            OnPropertyChanged(nameof(SubfolderPreview));
         }
 
         private async Task BrowseOutputFolderAsync()
@@ -394,13 +456,13 @@ namespace Fujify.ViewModels
             s.ConversionTargetMode = IsCaptureOneModeSelected ? "CaptureOne" : "Lightroom";
             s.CustomOutputFolder = HasCustomOutputFolder ? OutputFolderPath : null;
             s.BackupOriginalFile = BackupOriginalFile;
+            s.VerifyFileIntegrity = VerifyFileIntegrity;
             s.AppendSuffix = AppendSuffix;
             s.Suffix = Suffix;
             s.CreateSubfolder = CreateSubfolder;
             s.SubfolderUseOriginalName = SubfolderUseOriginalName;
             s.SubfolderSuffix = SubfolderSuffix;
             s.SubfolderCustomName = SubfolderCustomName;
-            s.AutoOpenInLightroom = AutoOpenInLightroom;
             s.AutoOpenInCaptureOne = AutoOpenInCaptureOne;
             _settingsService.Save();
 
@@ -418,13 +480,37 @@ namespace Fujify.ViewModels
 
             try
             {
-                // Buffer a brief delay to batch all incoming Explorer secondary instances
+                // Buffer a quiet window to batch all incoming Explorer secondary instances
                 Subtitle = "Gathering files...";
-                await Task.Delay(150, ct);
+                int lastCount = -1;
+                int stableChecks = 0;
+                while (true)
+                {
+                    DrainIncomingQueue();
+                    int currentCount;
+                    lock (_allFiles) { currentCount = _allFiles.Count; }
 
-                DrainIncomingQueue();
+                    if (currentCount != lastCount)
+                    {
+                        lastCount = currentCount;
+                        stableChecks = 0;
+                        Subtitle = $"Gathering files... ({lastCount} detected)";
+                    }
+                    else
+                    {
+                        stableChecks++;
+                        if (stableChecks >= 2) // 2 consecutive checks without change (>= 500ms stable)
+                        {
+                            break;
+                        }
+                    }
 
-                if (_allFiles.Count == 0)
+                    await Task.Delay(250, ct);
+                }
+
+                int initialCount;
+                lock (_allFiles) { initialCount = _allFiles.Count; }
+                if (initialCount == 0)
                 {
                     Title = "No Files to Process";
                     Subtitle = "No supported RAW files were provided.";
@@ -436,29 +522,16 @@ namespace Fujify.ViewModels
                     return;
                 }
 
-                // Free Tier Queue Limit Enforcement
-                var filesToProcess = _allFiles;
-                if (!_licenseService.IsPro && _allFiles.Count > _licenseService.MaxFreeQueueSize)
-                {
-                    int skipped = _allFiles.Count - _licenseService.MaxFreeQueueSize;
-                    filesToProcess = _allFiles.Take(_licenseService.MaxFreeQueueSize).ToList();
-                    Subtitle = $"Free Tier: processing first {_licenseService.MaxFreeQueueSize} photos ({skipped} skipped)...";
-                }
-
-                int totalCount = filesToProcess.Count;
+                var processedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 int processedCount = 0;
                 int successCount = 0;
                 int errorCount = 0;
 
-                IsProgressIndeterminate = false;
-                ProgressValue = 0;
-                ProgressDetailText = $"0 of {totalCount} photos processed";
-                ProgressPercentageText = "0%";
-                Subtitle = $"Processing {totalCount} photo{(totalCount == 1 ? "" : "s")}...";
-
+                string? firstFile;
+                lock (_allFiles) { firstFile = _allFiles.FirstOrDefault(); }
                 int configuredConcurrency = _settingsService.Settings.MaxConcurrentConversions;
                 int maxConcurrency = DrivePerformanceHelper.GetOptimalConversionConcurrency(
-                    filesToProcess.FirstOrDefault(),
+                    firstFile,
                     configuredConcurrency,
                     _licenseService.IsPro);
 
@@ -470,57 +543,114 @@ namespace Fujify.ViewModels
 
                 string? effectiveOutputFolder = HasCustomOutputFolder ? OutputFolderPath : null;
 
-                await Parallel.ForEachAsync(filesToProcess, parallelOptions, async (filePath, token) =>
+                while (true)
                 {
-                    token.ThrowIfCancellationRequested();
+                    ct.ThrowIfCancellationRequested();
+                    DrainIncomingQueue();
 
-                    string fileName = Path.GetFileName(filePath);
-                    Dispatcher.UIThread.Post(() =>
+                    List<string> currentBatch;
+                    lock (_allFiles)
                     {
-                        Subtitle = $"Converting: {fileName}";
-                    });
-
-                    bool success = false;
-                    try
-                    {
-                        string destPath = await ConvertAndInjectSingleFileAsync(filePath, effectiveOutputFolder, token);
-                        lock (_convertedDngFiles)
+                        currentBatch = _allFiles.Where(f => !processedFiles.Contains(f)).ToList();
+                        if (!_licenseService.IsPro)
                         {
-                            _convertedDngFiles.Add(destPath);
+                            int allowedRemaining = _licenseService.MaxFreeQueueSize - processedFiles.Count;
+                            if (allowedRemaining <= 0)
+                            {
+                                break;
+                            }
+                            currentBatch = currentBatch.Take(allowedRemaining).ToList();
                         }
-                        success = true;
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        throw;
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"[QuickProcess] Error on '{filePath}': {ex.Message}");
+
+                        foreach (var f in currentBatch)
+                        {
+                            processedFiles.Add(f);
+                        }
                     }
 
-                    int current = Interlocked.Increment(ref processedCount);
-                    if (success) Interlocked.Increment(ref successCount);
-                    else Interlocked.Increment(ref errorCount);
-
-                    int pct = (int)((double)current / totalCount * 100);
-
-                    Dispatcher.UIThread.Post(() =>
+                    if (currentBatch.Count == 0)
                     {
-                        ProgressValue = pct;
-                        ProgressPercentageText = $"{pct}%";
-                        ProgressDetailText = $"{current} of {totalCount} photos processed";
+                        // Pause to check if any final secondary instances arrived
+                        await Task.Delay(250, ct);
+                        DrainIncomingQueue();
+                        lock (_allFiles)
+                        {
+                            if (_allFiles.Any(f => !processedFiles.Contains(f)))
+                            {
+                                continue;
+                            }
+                        }
+                        break;
+                    }
+
+                    int totalCount;
+                    lock (_allFiles) { totalCount = _allFiles.Count; }
+                    int totalTarget = _licenseService.IsPro
+                        ? totalCount
+                        : Math.Min(totalCount, _licenseService.MaxFreeQueueSize);
+
+                    IsProgressIndeterminate = false;
+                    ProgressDetailText = $"{processedCount} of {totalTarget} photos processed";
+                    Subtitle = $"Processing {totalTarget} photo{(totalTarget == 1 ? "" : "s")}...";
+
+                    await Parallel.ForEachAsync(currentBatch, parallelOptions, async (filePath, token) =>
+                    {
+                        token.ThrowIfCancellationRequested();
+
+                        string fileName = Path.GetFileName(filePath);
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            Subtitle = $"Converting: {fileName}";
+                        });
+
+                        bool success = false;
+                        try
+                        {
+                            string destPath = await ConvertAndInjectSingleFileAsync(filePath, effectiveOutputFolder, token);
+                            lock (_convertedDngFiles)
+                            {
+                                _convertedDngFiles.Add(destPath);
+                            }
+                            success = true;
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"[QuickProcess] Error on '{filePath}': {ex.Message}");
+                        }
+
+                        int current = Interlocked.Increment(ref processedCount);
+                        if (success) Interlocked.Increment(ref successCount);
+                        else Interlocked.Increment(ref errorCount);
+
+                        int totalFiles;
+                        lock (_allFiles) { totalFiles = _allFiles.Count; }
+                        int currentTotal = _licenseService.IsPro
+                            ? totalFiles
+                            : Math.Min(totalFiles, _licenseService.MaxFreeQueueSize);
+                        int pct = currentTotal > 0 ? (int)((double)current / currentTotal * 100) : 100;
+
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            ProgressValue = pct;
+                            ProgressPercentageText = $"{pct}%";
+                            ProgressDetailText = $"{current} of {currentTotal} photos processed";
+                        });
                     });
-                });
+                }
 
                 // Completed successfully
                 bool hasErrors = errorCount > 0;
+                int finalTotal = successCount + errorCount;
                 Title = hasErrors ? "Processing Finished with Errors" : "Processing Complete";
                 Subtitle = hasErrors
                     ? $"{successCount} succeeded, {errorCount} failed. Enjoy your new Film simulations!"
-                    : (totalCount == 1
+                    : (finalTotal == 1
                         ? "1 photo converted successfully. Enjoy your new Film simulations!"
-                        : $"{totalCount} photos converted successfully. Enjoy your new Film simulations!");
+                        : $"{finalTotal} photos converted successfully. Enjoy your new Film simulations!");
 
                 StatusIcon = hasErrors ? "⚠" : "✔";
                 StatusIconColor = hasErrors ? "#F39C12" : "#01D701";
@@ -531,19 +661,12 @@ namespace Fujify.ViewModels
 
                 CanOpenFolder = !string.IsNullOrEmpty(effectiveFolder) && Directory.Exists(effectiveFolder);
 
-                // Auto-Open in Lightroom or Capture One if enabled
+                // Auto-Open in Capture One if enabled
                 if (IsCaptureOneModeSelected)
                 {
                     if (AutoOpenInCaptureOne && _convertedDngFiles.Count > 0)
                     {
                         CrossPlatformLauncher.OpenInCaptureOne(_convertedDngFiles);
-                    }
-                }
-                else
-                {
-                    if (AutoOpenInLightroom && _convertedDngFiles.Count > 0)
-                    {
-                        MainViewModel.PlatformOpenInLightroomCallback?.Invoke(_convertedDngFiles);
                     }
                 }
 
@@ -669,6 +792,24 @@ namespace Fujify.ViewModels
                         throw new InvalidOperationException(patchResult.ErrorMessage ?? "RAF model patch failed");
                     }
 
+                    if (_settingsService.Settings.VerifyFileIntegrity || _verifyFileIntegrity)
+                    {
+                        var integrity = await _fileIntegrityService.VerifyIntegrityAsync(finalDestFilePath, ct);
+                        if (!integrity.IsValid)
+                        {
+                            string err = $"File integrity check failed: {integrity.ErrorMessage}";
+                            if (File.Exists(finalDestFilePath) && !string.Equals(Path.GetFullPath(sourceForPatch), Path.GetFullPath(finalDestFilePath), StringComparison.OrdinalIgnoreCase))
+                            {
+                                try { File.Delete(finalDestFilePath); } catch { }
+                            }
+                            if (isExactSameFilePath && createBackup && isSameFolder && File.Exists(sourceForPatch) && !File.Exists(filePath))
+                            {
+                                try { File.Move(sourceForPatch, filePath); } catch { }
+                            }
+                            throw new InvalidOperationException(err);
+                        }
+                    }
+
                     if (!createBackup && !string.Equals(Path.GetFullPath(sourceForPatch), Path.GetFullPath(finalDestFilePath), StringComparison.OrdinalIgnoreCase))
                     {
                         FileTrashHelper.SendToTrash(sourceForPatch);
@@ -701,6 +842,20 @@ namespace Fujify.ViewModels
                 if (!convResult.Success || string.IsNullOrEmpty(convResult.OutputRafPath))
                 {
                     throw new InvalidOperationException(convResult.ErrorMessage ?? "Conversion to RAF failed");
+                }
+
+                if (_settingsService.Settings.VerifyFileIntegrity || _verifyFileIntegrity)
+                {
+                    var integrity = await _fileIntegrityService.VerifyIntegrityAsync(finalDestFilePath, ct);
+                    if (!integrity.IsValid)
+                    {
+                        string err = $"File integrity check failed: {integrity.ErrorMessage}";
+                        if (File.Exists(finalDestFilePath) && !string.Equals(Path.GetFullPath(filePath), Path.GetFullPath(finalDestFilePath), StringComparison.OrdinalIgnoreCase))
+                        {
+                            try { File.Delete(finalDestFilePath); } catch { }
+                        }
+                        throw new InvalidOperationException(err);
+                    }
                 }
 
                 if (!createBackup)
@@ -743,16 +898,15 @@ namespace Fujify.ViewModels
                     {
                         bool embedOriginalRaw = _settingsService.Settings.EmbedOriginalRaw;
 
-                        string targetDngForConversion;
-                        if (string.IsNullOrEmpty(outputFolder) && !CreateSubfolder)
+                        // Ensure destination directory exists directly before converting
+                        string? targetDir = Path.GetDirectoryName(finalDestFilePath);
+                        if (!string.IsNullOrEmpty(targetDir) && !Directory.Exists(targetDir))
                         {
-                            targetDngForConversion = finalDestFilePath;
+                            Directory.CreateDirectory(targetDir);
                         }
-                        else
-                        {
-                            string sourceDir = Path.GetDirectoryName(filePath) ?? string.Empty;
-                            targetDngForConversion = Path.Combine(sourceDir, $"{Path.GetFileNameWithoutExtension(filePath)}_tmp_{Guid.NewGuid():N}.dng");
-                        }
+
+                        // Convert directly into final destination path (no in-place temp files)
+                        string targetDngForConversion = finalDestFilePath;
 
                         bool useLossless = _licenseService.IsPro && _settingsService.Settings.LosslessCompression;
                         var convResult = await Task.Run(() => _rawConverterService.ConvertToDng(
@@ -793,6 +947,10 @@ namespace Fujify.ViewModels
 
                     if (!metaResult.Success)
                     {
+                        if (!isOriginallyDng && !string.IsNullOrEmpty(finalDestFilePath) && File.Exists(finalDestFilePath))
+                        {
+                            try { File.Delete(finalDestFilePath); } catch { }
+                        }
                         if (!string.IsNullOrEmpty(tempInPlaceOutputFile) && File.Exists(tempInPlaceOutputFile))
                         {
                             try { File.Delete(tempInPlaceOutputFile); } catch { }
@@ -802,6 +960,32 @@ namespace Fujify.ViewModels
                             try { File.Move(origBackupPath, filePath); } catch { }
                         }
                         throw new InvalidOperationException(metaResult.ErrorMessage ?? "Error injecting Fujifilm metadata");
+                    }
+
+                    string targetToVerify = !string.IsNullOrEmpty(tempInPlaceOutputFile)
+                        ? tempInPlaceOutputFile
+                        : finalDestFilePath;
+
+                    if (_settingsService.Settings.VerifyFileIntegrity || _verifyFileIntegrity)
+                    {
+                        var integrity = await _fileIntegrityService.VerifyIntegrityAsync(targetToVerify, ct);
+                        if (!integrity.IsValid)
+                        {
+                            string err = $"File integrity check failed: {integrity.ErrorMessage}";
+                            if (!string.IsNullOrEmpty(tempInPlaceOutputFile) && File.Exists(tempInPlaceOutputFile))
+                            {
+                                try { File.Delete(tempInPlaceOutputFile); } catch { }
+                            }
+                            if (!isOriginallyDng && !string.IsNullOrEmpty(finalDestFilePath) && File.Exists(finalDestFilePath))
+                            {
+                                try { File.Delete(finalDestFilePath); } catch { }
+                            }
+                            if (isOriginallyDng && createBackup && isSameFolder && !string.IsNullOrEmpty(origBackupPath) && File.Exists(origBackupPath) && !File.Exists(filePath))
+                            {
+                                try { File.Move(origBackupPath, filePath); } catch { }
+                            }
+                            throw new InvalidOperationException(err);
+                        }
                     }
 
                     if (!string.IsNullOrEmpty(tempInPlaceOutputFile))
@@ -829,6 +1013,10 @@ namespace Fujify.ViewModels
                 }
                 catch
                 {
+                    if (!isOriginallyDng && !string.IsNullOrEmpty(finalDestFilePath) && File.Exists(finalDestFilePath))
+                    {
+                        try { File.Delete(finalDestFilePath); } catch { }
+                    }
                     if (!string.IsNullOrEmpty(tempInPlaceOutputFile) && File.Exists(tempInPlaceOutputFile))
                     {
                         try { File.Delete(tempInPlaceOutputFile); } catch { }

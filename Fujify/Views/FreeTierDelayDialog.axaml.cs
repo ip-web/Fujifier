@@ -43,6 +43,7 @@ namespace Fujify.Views
         public FreeTierDelayDialog(ILicenseService licenseService, bool isPostConversion = false)
         {
             InitializeComponent();
+            NativeWindowHelper.ConfigureDialogWindow(this);
             _licenseService = licenseService;
 
             if (isPostConversion)

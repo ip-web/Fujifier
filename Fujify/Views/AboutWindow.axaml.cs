@@ -10,6 +10,7 @@ namespace Fujify.Views
         public AboutWindow()
         {
             InitializeComponent();
+            Common.NativeWindowHelper.ConfigureDialogWindow(this);
         }
 
         private void Close_Click(object? sender, RoutedEventArgs e)

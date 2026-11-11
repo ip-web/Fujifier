@@ -80,7 +80,7 @@ public partial class App : Application
         var surfColor = useMica
             ? (isLight
                 ? Avalonia.Media.Color.Parse("#FFFFFF")
-                : (isAmoled ? Avalonia.Media.Color.Parse("#101014") : Avalonia.Media.Color.Parse("#E620212B")))
+                : (isAmoled ? Avalonia.Media.Color.Parse("#101014") : Avalonia.Media.Color.Parse("#FF20212B")))
             : (isLight
                 ? Avalonia.Media.Color.Parse("#FFFFFFFF")
                 : (isAmoled ? Avalonia.Media.Color.Parse("#FF101014") : Avalonia.Media.Color.Parse("#FF20212B")));
@@ -155,32 +155,47 @@ public partial class App : Application
     private static MainWindow? _activeMainWindow;
     private static QuickProcessViewModel? _activeQuickViewModel;
     private static QuickProcessWindow? _activeQuickWindow;
+    private static readonly object _startupLock = new();
     private static readonly System.Collections.Concurrent.ConcurrentQueue<string> _pendingStartupFiles = new();
 
     public static void HandleIncomingPayload(Services.IpcPayload payload)
     {
         if (payload == null || payload.Files == null || payload.Files.Count == 0) return;
 
-        if (_activeQuickViewModel != null)
+        lock (_startupLock)
         {
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            if (_activeQuickViewModel != null)
             {
-                if (_activeQuickWindow != null)
+                var files = payload.Files;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
                 {
-                    _activeQuickWindow.Show();
-                    if (_activeQuickWindow.WindowState == Avalonia.Controls.WindowState.Minimized)
+                    if (_activeQuickWindow != null)
                     {
-                        _activeQuickWindow.WindowState = Avalonia.Controls.WindowState.Normal;
+                        _activeQuickWindow.Show();
+                        if (_activeQuickWindow.WindowState == Avalonia.Controls.WindowState.Minimized)
+                        {
+                            _activeQuickWindow.WindowState = Avalonia.Controls.WindowState.Normal;
+                        }
+                        _activeQuickWindow.Activate();
                     }
-                    _activeQuickWindow.Activate();
+
+                    _activeQuickViewModel.AddFiles(files);
+                });
+                return;
+            }
+
+            if (InitialCommandLineArgs?.IsQuickProcess == true)
+            {
+                // Quick process is initializing; buffer files until _activeQuickViewModel is ready
+                foreach (var f in payload.Files)
+                {
+                    _pendingStartupFiles.Enqueue(f);
                 }
+                return;
+            }
 
-                _activeQuickViewModel.AddFiles(payload.Files);
-            });
-            return;
+            HandleIncomingFiles(payload.Files);
         }
-
-        HandleIncomingFiles(payload.Files);
     }
 
     public static void HandleIncomingFiles(System.Collections.Generic.IReadOnlyList<string> files)
@@ -190,28 +205,31 @@ public partial class App : Application
         var existingFiles = files.Where(System.IO.File.Exists).ToList();
         if (existingFiles.Count == 0) return;
 
-        if (_activeViewModel != null)
+        lock (_startupLock)
         {
-            Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
+            if (_activeViewModel != null)
             {
-                if (_activeMainWindow != null)
+                Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
                 {
-                    _activeMainWindow.Show();
-                    if (_activeMainWindow.WindowState == Avalonia.Controls.WindowState.Minimized)
+                    if (_activeMainWindow != null)
                     {
-                        _activeMainWindow.WindowState = Avalonia.Controls.WindowState.Normal;
+                        _activeMainWindow.Show();
+                        if (_activeMainWindow.WindowState == Avalonia.Controls.WindowState.Minimized)
+                        {
+                            _activeMainWindow.WindowState = Avalonia.Controls.WindowState.Normal;
+                        }
+                        _activeMainWindow.Activate();
                     }
-                    _activeMainWindow.Activate();
-                }
 
-                await _activeViewModel.AddFilesAsync(existingFiles);
-            });
-        }
-        else
-        {
-            foreach (var f in existingFiles)
+                    await _activeViewModel.AddFilesAsync(existingFiles);
+                });
+            }
+            else
             {
-                _pendingStartupFiles.Enqueue(f);
+                foreach (var f in existingFiles)
+                {
+                    _pendingStartupFiles.Enqueue(f);
+                }
             }
         }
     }
@@ -246,8 +264,20 @@ public partial class App : Application
             // Direct Quick Process Mode: Do not boot up full UI
             if (InitialCommandLineArgs?.IsQuickProcess == true)
             {
+                var initialFiles = new System.Collections.Generic.List<string>(InitialCommandLineArgs.Files);
+                lock (_startupLock)
+                {
+                    while (_pendingStartupFiles.TryDequeue(out var pendingFile))
+                    {
+                        if (!initialFiles.Contains(pendingFile, System.StringComparer.OrdinalIgnoreCase))
+                        {
+                            initialFiles.Add(pendingFile);
+                        }
+                    }
+                }
+
                 var quickVm = new QuickProcessViewModel(
-                    InitialCommandLineArgs.Files,
+                    initialFiles,
                     showOptions: InitialCommandLineArgs.Mode == Common.LaunchMode.ConvertWithOptions,
                     settingsService: settingsService,
                     licenseService: licenseService);
@@ -258,26 +288,32 @@ public partial class App : Application
                 };
                 quickVm.OwnerWindow = quickWindow;
                 desktop.MainWindow = quickWindow;
-                _activeQuickViewModel = quickVm;
-                _activeQuickWindow = quickWindow;
 
-                if (System.OperatingSystem.IsWindows())
+                lock (_startupLock)
                 {
-                    Services.WindowsContextMenuService.RegisterOpenWith();
-                    if (settingsService.Settings.EnableWindowsContextMenu && licenseService.IsPro)
+                    _activeQuickViewModel = quickVm;
+                    _activeQuickWindow = quickWindow;
+
+                    // Drain any files that arrived while constructors were running
+                    var lateFiles = new System.Collections.Generic.List<string>();
+                    while (_pendingStartupFiles.TryDequeue(out var lateFile))
                     {
-                        Services.WindowsContextMenuService.RegisterContextMenu();
+                        lateFiles.Add(lateFile);
                     }
-                    else if (Services.WindowsContextMenuService.IsContextMenuRegistered())
+                    if (lateFiles.Count > 0)
                     {
-                        Services.WindowsContextMenuService.UnregisterContextMenu();
+                        quickVm.AddFiles(lateFiles);
                     }
                 }
+
+                SyncContextMenuIntegration(settingsService, licenseService);
 
                 quickWindow.Show();
                 base.OnFrameworkInitializationCompleted();
                 return;
             }
+
+            SyncContextMenuIntegration(settingsService, licenseService);
 
             var dialogService = new Services.DialogService(settingsService, licenseService);
             var vm = new MainViewModel(dialogService: dialogService, settingsService: settingsService, licenseService: licenseService);
@@ -288,22 +324,6 @@ public partial class App : Application
             };
             vm.OwnerWindow = mainWindow;
             desktop.MainWindow = mainWindow;
-            _activeMainWindow = mainWindow;
-            _activeViewModel = vm;
-
-            // Ensure Windows Explorer context menu is kept up-to-date only if Pro
-            if (System.OperatingSystem.IsWindows())
-            {
-                Services.WindowsContextMenuService.RegisterOpenWith();
-                if (settingsService.Settings.EnableWindowsContextMenu && licenseService.IsPro)
-                {
-                    Services.WindowsContextMenuService.RegisterContextMenu();
-                }
-                else if (Services.WindowsContextMenuService.IsContextMenuRegistered())
-                {
-                    Services.WindowsContextMenuService.UnregisterContextMenu();
-                }
-            }
 
             var startupFiles = new System.Collections.Generic.List<string>();
             if (InitialCommandLineArgs != null && InitialCommandLineArgs.Files.Count > 0)
@@ -315,11 +335,17 @@ public partial class App : Application
                 startupFiles.AddRange(desktop.Args.Where(System.IO.File.Exists));
             }
 
-            while (_pendingStartupFiles.TryDequeue(out var pending))
+            lock (_startupLock)
             {
-                if (System.IO.File.Exists(pending) && !startupFiles.Contains(pending, System.StringComparer.OrdinalIgnoreCase))
+                _activeMainWindow = mainWindow;
+                _activeViewModel = vm;
+
+                while (_pendingStartupFiles.TryDequeue(out var pending))
                 {
-                    startupFiles.Add(pending);
+                    if (System.IO.File.Exists(pending) && !startupFiles.Contains(pending, System.StringComparer.OrdinalIgnoreCase))
+                    {
+                        startupFiles.Add(pending);
+                    }
                 }
             }
 
@@ -604,5 +630,39 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static void SyncContextMenuIntegration(Services.ISettingsService settingsService, Services.ILicenseService licenseService)
+    {
+        try
+        {
+            if (System.OperatingSystem.IsWindows())
+            {
+                Services.WindowsContextMenuService.RegisterOpenWith();
+                if (settingsService.Settings.EnableWindowsContextMenu && licenseService.IsPro)
+                {
+                    Services.WindowsContextMenuService.RegisterContextMenu();
+                }
+                else if (Services.WindowsContextMenuService.IsContextMenuRegistered())
+                {
+                    Services.WindowsContextMenuService.UnregisterContextMenu();
+                }
+            }
+            else if (System.OperatingSystem.IsMacOS())
+            {
+                if (settingsService.Settings.EnableWindowsContextMenu && licenseService.IsPro)
+                {
+                    Services.MacQuickActionService.RegisterQuickActions();
+                }
+                else if (Services.MacQuickActionService.AreQuickActionsRegistered())
+                {
+                    Services.MacQuickActionService.UnregisterQuickActions();
+                }
+            }
+        }
+        catch (System.Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[App] Error syncing context menu: {ex.Message}");
+        }
     }
 }

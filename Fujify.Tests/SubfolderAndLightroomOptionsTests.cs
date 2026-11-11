@@ -1,6 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using Fujify.Models;
 using Fujify.Services;
 using Fujify.ViewModels;
 using Xunit;
@@ -266,6 +270,190 @@ namespace Fujify.Tests
         }
 
         [Fact]
+        public void QuickProcessViewModel_SubfolderPreview_DefaultsToPhotos_WhenNoFilesAndNoOutputFolder()
+        {
+            var settingsService = new FakeSettingsService();
+            settingsService.Settings.CustomOutputFolder = null;
+            var vm = new QuickProcessViewModel(settingsService: settingsService);
+            vm.CreateSubfolder = true;
+            vm.SubfolderUseOriginalName = true;
+            vm.SubfolderSuffix = "-fujified";
+
+            Assert.Equal("Photos-fujified", vm.SubfolderPreview);
+        }
+
+        [Fact]
+        public void QuickProcessViewModel_SubfolderPreview_UsesPictureFolder_WhenFilesSelected()
+        {
+            var settingsService = new FakeSettingsService();
+            settingsService.Settings.CustomOutputFolder = null;
+            string tempDir = Path.Combine(Path.GetTempPath(), $"trip_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempDir);
+            string testFile = Path.Combine(tempDir, "photo1.arw");
+            File.WriteAllText(testFile, "dummy");
+
+            try
+            {
+                var vm = new QuickProcessViewModel(
+                    initialFiles: new[] { testFile },
+                    settingsService: settingsService);
+                vm.CreateSubfolder = true;
+                vm.SubfolderUseOriginalName = true;
+                vm.SubfolderSuffix = "-fujified";
+
+                string expectedFolder = Path.GetFileName(tempDir);
+                Assert.Equal($"{expectedFolder}-fujified", vm.SubfolderPreview);
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            }
+        }
+
+        [Fact]
+        public void QuickProcessViewModel_SubfolderPreview_UsesOutputFolder_WhenOutputFolderIsSet()
+        {
+            var settingsService = new FakeSettingsService();
+            settingsService.Settings.CustomOutputFolder = null;
+            string tempDir = Path.Combine(Path.GetTempPath(), $"trip_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempDir);
+            string testFile = Path.Combine(tempDir, "photo1.arw");
+            File.WriteAllText(testFile, "dummy");
+            string outputFolder = Path.Combine("D:", "Exports");
+
+            try
+            {
+                var vm = new QuickProcessViewModel(
+                    initialFiles: new[] { testFile },
+                    settingsService: settingsService);
+                vm.CreateSubfolder = true;
+                vm.SubfolderUseOriginalName = true;
+                vm.SubfolderSuffix = "-fujified";
+
+                string expectedFolder = Path.GetFileName(tempDir);
+                Assert.Equal($"{expectedFolder}-fujified", vm.SubfolderPreview);
+
+                vm.OutputFolderPath = outputFolder;
+                Assert.Equal("Exports-fujified", vm.SubfolderPreview);
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            }
+        }
+
+        [Fact]
+        public void QuickProcessViewModel_SubfolderPreview_ClearingOutputFolder_RevertsToPictureFolder()
+        {
+            var settingsService = new FakeSettingsService();
+            settingsService.Settings.CustomOutputFolder = null;
+            string tempDir = Path.Combine(Path.GetTempPath(), $"trip_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempDir);
+            string testFile = Path.Combine(tempDir, "photo1.arw");
+            File.WriteAllText(testFile, "dummy");
+            string outputFolder = Path.Combine("D:", "Exports");
+
+            try
+            {
+                var vm = new QuickProcessViewModel(
+                    initialFiles: new[] { testFile },
+                    settingsService: settingsService);
+                vm.CreateSubfolder = true;
+                vm.SubfolderUseOriginalName = true;
+                vm.SubfolderSuffix = "-fujified";
+                vm.OutputFolderPath = outputFolder;
+
+                Assert.Equal("Exports-fujified", vm.SubfolderPreview);
+
+                vm.OutputFolderPath = null;
+                string expectedFolder = Path.GetFileName(tempDir);
+                Assert.Equal($"{expectedFolder}-fujified", vm.SubfolderPreview);
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            }
+        }
+
+        [Fact]
+        public void MainViewModel_SubfolderPreview_UsesPictureFolder_WhenFilesAdded()
+        {
+            var settingsService = new FakeSettingsService();
+            settingsService.Settings.CustomOutputFolder = null;
+            var vm = new MainViewModel(settingsService: settingsService);
+            vm.CreateSubfolder = true;
+            vm.SubfolderUseOriginalName = true;
+            vm.SubfolderSuffix = "-fujified";
+
+            Assert.Equal("Photos/Photos-fujified/", vm.SubfolderPreview);
+
+            vm.Files.Add(new FileItem { FilePath = Path.Combine("C:", "Holiday", "pic1.arw") });
+            Assert.Equal("Holiday/Holiday-fujified/", vm.SubfolderPreview);
+        }
+
+        [Fact]
+        public void MainViewModel_SubfolderPreview_UsesOutputFolder_WhenOutputFolderIsSet()
+        {
+            var settingsService = new FakeSettingsService();
+            settingsService.Settings.CustomOutputFolder = null;
+            var vm = new MainViewModel(settingsService: settingsService);
+            vm.CreateSubfolder = true;
+            vm.SubfolderUseOriginalName = true;
+            vm.SubfolderSuffix = "-fujified";
+
+            vm.OutputFolderPath = Path.Combine("D:", "OutputDirectory");
+            Assert.Equal("OutputDirectory/OutputDirectory-fujified/", vm.SubfolderPreview);
+        }
+
+        [Fact]
+        public void MainViewModel_SubfolderPreview_ClearingOutputFolder_RevertsToPictureFolder()
+        {
+            var settingsService = new FakeSettingsService();
+            settingsService.Settings.CustomOutputFolder = null;
+            var vm = new MainViewModel(settingsService: settingsService);
+            vm.CreateSubfolder = true;
+            vm.SubfolderUseOriginalName = true;
+            vm.SubfolderSuffix = "-fujified";
+
+            vm.Files.Add(new FileItem { FilePath = Path.Combine("C:", "Holiday", "pic1.arw") });
+            vm.OutputFolderPath = Path.Combine("D:", "OutputDirectory");
+            Assert.Equal("OutputDirectory/OutputDirectory-fujified/", vm.SubfolderPreview);
+
+            vm.OutputFolderPath = null;
+            Assert.Equal("Holiday/Holiday-fujified/", vm.SubfolderPreview);
+        }
+
+        [Fact]
+        public void PreferencesViewModel_SubfolderPreview_UsesCustomOutputFolder_WhenSetInSettings()
+        {
+            var settingsService = new FakeSettingsService();
+            settingsService.Settings.CustomOutputFolder = Path.Combine("D:", "MyCustomOutput");
+            var licenseService = new LicenseService(settingsService);
+            var prefs = new PreferencesViewModel(settingsService, licenseService);
+            prefs.CreateSubfolder = true;
+            prefs.SubfolderUseOriginalName = true;
+            prefs.SubfolderSuffix = "-fujified";
+
+            Assert.Equal("MyCustomOutput → MyCustomOutput/MyCustomOutput-fujified/", prefs.SubfolderPreview);
+        }
+
+        [Fact]
+        public void OutputLocationHelper_ComputeTargetDirectory_FallsBackToCustomOutputFolder_WhenSourceDirIsEmpty()
+        {
+            string expected = Path.Combine("D:", "ExportFolder", "ExportFolder-fujified");
+
+            string result = OutputLocationHelper.ComputeTargetDirectory(
+                sourceFilePath: "pic1.arw",
+                customOutputFolder: Path.Combine("D:", "ExportFolder"),
+                createSubfolder: true,
+                subfolderUseOriginalName: true,
+                subfolderSuffix: "-fujified",
+                subfolderCustomName: "Fujified");
+
+            Assert.Equal(expected, result);
+        }
+
+        [Fact]
         public void ResolveAndroidStoragePath_ResolvesSafUrisCorrectly()
         {
             Assert.Equal("/storage/emulated/0/MyFolder", DialogService.ResolveAndroidStoragePathString("primary:MyFolder"));
@@ -277,6 +465,118 @@ namespace Fujify.Tests
 
             // Normal desktop path should remain untouched
             Assert.Equal("C:\\Photos", DialogService.ResolveAndroidStoragePathString("C:\\Photos"));
+        }
+
+        [Fact]
+        public async Task ProcessFileAsync_WithOutputFolder_ShouldDirectlyConvertIntoDestinationFolder_WithoutSourceDirTempFiles()
+        {
+            var tempSourceDir = Path.Combine(Path.GetTempPath(), $"src_{Guid.NewGuid():N}");
+            var tempOutputDir = Path.Combine(Path.GetTempPath(), $"out_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempSourceDir);
+            Directory.CreateDirectory(tempOutputDir);
+
+            string rawFile = Path.Combine(tempSourceDir, "photo1.arw");
+            File.WriteAllText(rawFile, "dummy raw content");
+
+            try
+            {
+                var settingsService = new FakeSettingsService();
+                settingsService.Settings.EnableCaptureOneMode = false;
+                settingsService.Settings.ConversionTargetMode = "Lightroom";
+                settingsService.Settings.BackupOriginalFile = true;
+
+                string? capturedTargetDngPath = null;
+                var mockRawConverter = new MockRawConverter
+                {
+                    OnConvert = (file, embed, target, lossless) =>
+                    {
+                        capturedTargetDngPath = target;
+                        // Simulate creating the target DNG file
+                        File.WriteAllText(target!, "dummy dng content");
+                        return new ConversionResult(true, target, null);
+                    }
+                };
+
+                var mockMetadata = new MockMetadataService
+                {
+                    OnInject = (dng, outDir, backup, isDng, customOut, model, srcRaw) =>
+                    {
+                        return new MetadataResult(true, null);
+                    }
+                };
+
+                var vm = new MainViewModel(
+                    rawConverterService: mockRawConverter,
+                    metadataService: mockMetadata,
+                    settingsService: settingsService);
+
+                vm.OutputFolderPath = tempOutputDir;
+
+                var reservedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                bool success = await vm.ProcessSingleFileAsync(
+                    rawFile,
+                    tempOutputDir,
+                    createBackup: true,
+                    conflictChoice: ConflictChoice.Overwrite,
+                    reservedOutputPaths: reservedPaths,
+                    ct: CancellationToken.None);
+
+                Assert.True(success);
+                Assert.NotNull(capturedTargetDngPath);
+
+                // Target DNG path MUST be inside tempOutputDir and match the expected file name
+                Assert.StartsWith(tempOutputDir, capturedTargetDngPath, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal(Path.Combine(tempOutputDir, "photo1.dng"), capturedTargetDngPath);
+                Assert.DoesNotContain("_tmp_", capturedTargetDngPath);
+
+                // Assert NO temp files were ever created in tempSourceDir
+                var sourceFiles = Directory.GetFiles(tempSourceDir);
+                Assert.Single(sourceFiles);
+                Assert.Equal(rawFile, sourceFiles[0]);
+            }
+            finally
+            {
+                if (Directory.Exists(tempSourceDir)) Directory.Delete(tempSourceDir, true);
+                if (Directory.Exists(tempOutputDir)) Directory.Delete(tempOutputDir, true);
+            }
+        }
+
+        private class MockRawConverter : IRawConverterService
+        {
+            public Func<string, bool, string?, bool, ConversionResult>? OnConvert { get; set; }
+
+            public ConversionResult ConvertToDng(string filePath, bool embedOriginalRaw, string? targetDngPath = null, bool losslessCompression = true)
+            {
+                return OnConvert?.Invoke(filePath, embedOriginalRaw, targetDngPath, losslessCompression)
+                    ?? new ConversionResult(true, targetDngPath ?? filePath, null);
+            }
+
+            public Task<ConversionResult> ConvertToDngAsync(string filePath, bool embedOriginalRaw, string? targetDngPath = null, bool losslessCompression = true, CancellationToken cancellationToken = default)
+            {
+                return Task.FromResult(ConvertToDng(filePath, embedOriginalRaw, targetDngPath, losslessCompression));
+            }
+        }
+
+        private class MockMetadataService : IMetadataService
+        {
+            public Func<string, string?, bool, bool, string?, string, string?, MetadataResult>? OnInject { get; set; }
+
+            public string GetCameraMakeAndModel(string filePath) => "Sony ILCE-7M4";
+            public int GetOrientation(string filePath) => 1;
+            public ExifData? GetExifData(string filePath) => null;
+
+            public MetadataResult InjectFujifilmMetadata(string dngFilePath, string? outputFolder, bool createBackup, bool isOriginallyDng, string? customOutputFilePath = null, string targetUniqueCameraModel = "Fujifilm X-T5", string? sourceRawFilePath = null)
+            {
+                return OnInject?.Invoke(dngFilePath, outputFolder, createBackup, isOriginallyDng, customOutputFilePath, targetUniqueCameraModel, sourceRawFilePath)
+                    ?? new MetadataResult(true, null);
+            }
+
+            public Task<MetadataResult> InjectFujifilmMetadataAsync(string dngFilePath, string? outputFolder, bool createBackup, bool isOriginallyDng, string? customOutputFilePath = null, string targetUniqueCameraModel = "Fujifilm X-T5", string? sourceRawFilePath = null, CancellationToken cancellationToken = default)
+            {
+                return Task.FromResult(InjectFujifilmMetadata(dngFilePath, outputFolder, createBackup, isOriginallyDng, customOutputFilePath, targetUniqueCameraModel, sourceRawFilePath));
+            }
+
+            public void CleanupTemporaryFiles(string dngFilePath, bool useOutputPath, bool createBackup, bool isOriginallyDng) { }
         }
 
         private class FakeSettingsService : ISettingsService

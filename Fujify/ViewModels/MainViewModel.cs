@@ -49,6 +49,7 @@ namespace Fujify.ViewModels
         private readonly ILicenseService _licenseService;
         private readonly IUpdateService _updateService;
         private readonly IAdService _adService;
+        private readonly IFileIntegrityService _fileIntegrityService;
 
         public bool IsPro => _licenseService.IsPro;
         public ILicenseService LicenseService => _licenseService;
@@ -59,6 +60,7 @@ namespace Fujify.ViewModels
             ".mef", ".mrw", ".nef", ".nrw", ".orf", ".rw2", ".pef", ".srw", ".arw", ".srf", ".sr2"
         };
 
+        private readonly SemaphoreSlim _importSemaphore = new(1, 1);
         private CancellationTokenSource? _processingCts;
         private string? _outputFolderPath;
         private bool _createBackup = true;
@@ -84,7 +86,8 @@ namespace Fujify.ViewModels
             ILicenseService? licenseService = null,
             IUpdateService? updateService = null,
             IAdService? adService = null,
-            IRafConverterService? rafConverterService = null)
+            IRafConverterService? rafConverterService = null,
+            IFileIntegrityService? fileIntegrityService = null)
         {
             _rawConverterService = rawConverterService ?? new RawConverterService();
             _rafConverterService = rafConverterService ?? new RafConverterService();
@@ -95,6 +98,7 @@ namespace Fujify.ViewModels
             _dialogService = dialogService ?? new DialogService(_settingsService, _licenseService);
             _updateService = updateService ?? new UpdateService(_settingsService);
             _adService = adService ?? new AdService(_licenseService);
+            _fileIntegrityService = fileIntegrityService ?? new FileIntegrityService();
             _createBackup = _settingsService.Settings.BackupOriginalFile;
             _outputFolderPath = _settingsService.Settings.CustomOutputFolder;
             Instance = this;
@@ -162,6 +166,7 @@ namespace Fujify.ViewModels
                 OnPropertyChanged(nameof(IsStep2Current));
                 OnPropertyChanged(nameof(IsStep3Current));
                 OnPropertyChanged(nameof(IsStep4Current));
+                OnPropertyChanged(nameof(SubfolderPreview));
                 (ClearCommand as AsyncRelayCommand)?.NotifyCanExecuteChanged();
                 (ProcessCommand as AsyncRelayCommand)?.NotifyCanExecuteChanged();
             };
@@ -993,16 +998,40 @@ namespace Fujify.ViewModels
             }
         }
 
+        private string GetEffectiveBaseFolderName()
+        {
+            if (!string.IsNullOrWhiteSpace(OutputFolderPath))
+            {
+                var name = Path.GetFileName(OutputFolderPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    return name;
+                }
+            }
+
+            if (Files.Count > 0 && !string.IsNullOrWhiteSpace(Files[0].FilePath))
+            {
+                var dir = Path.GetDirectoryName(Files[0].FilePath);
+                if (!string.IsNullOrWhiteSpace(dir))
+                {
+                    var name = Path.GetFileName(dir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                    if (!string.IsNullOrWhiteSpace(name))
+                    {
+                        return name;
+                    }
+                }
+            }
+
+            return "Photos";
+        }
+
         public string SubfolderPreview
         {
             get
             {
                 if (!CreateSubfolder) return string.Empty;
 
-                string folderSample = Files.Count > 0
-                    ? (Path.GetFileName(Path.GetDirectoryName(Files[0].FilePath)) ?? "Photos")
-                    : "Photos";
-                if (string.IsNullOrWhiteSpace(folderSample)) folderSample = "Photos";
+                string folderSample = GetEffectiveBaseFolderName();
 
                 string subfolderName = SubfolderUseOriginalName
                     ? $"{folderSample}{(string.IsNullOrEmpty(SubfolderSuffix) ? "" : SubfolderSuffix)}"
@@ -1069,6 +1098,44 @@ namespace Fujify.ViewModels
             }
         }
 
+        public bool EmbedOriginalRaw
+        {
+            get => _settingsService.Settings.EmbedOriginalRaw;
+            set
+            {
+                if (_settingsService.Settings.EmbedOriginalRaw != value)
+                {
+                    _settingsService.Settings.EmbedOriginalRaw = value;
+                    _settingsService.Save();
+                    OnPropertyChanged();
+                    if (_preferences != null)
+                    {
+                        _preferences.EmbedOriginalRaw = value;
+                    }
+                    OnPropertyChanged(nameof(QuickSettingsSummary));
+                }
+            }
+        }
+
+        public bool VerifyFileIntegrity
+        {
+            get => _settingsService.Settings.VerifyFileIntegrity;
+            set
+            {
+                if (_settingsService.Settings.VerifyFileIntegrity != value)
+                {
+                    _settingsService.Settings.VerifyFileIntegrity = value;
+                    _settingsService.Save();
+                    OnPropertyChanged();
+                    if (_preferences != null)
+                    {
+                        _preferences.VerifyFileIntegrity = value;
+                    }
+                    OnPropertyChanged(nameof(QuickSettingsSummary));
+                }
+            }
+        }
+
         private bool _isQuickSettingsExpanded = true;
         public bool IsQuickSettingsExpanded
         {
@@ -1089,6 +1156,8 @@ namespace Fujify.ViewModels
             {
                 var parts = new List<string>();
                 if (CreateBackup) parts.Add("Backup");
+                if (EmbedOriginalRaw) parts.Add("Embed RAW");
+                if (VerifyFileIntegrity) parts.Add("Verify");
                 if (AppendSuffix) parts.Add("Suffix");
                 if (IsSubfolderOptionSupported && CreateSubfolder) parts.Add("Subfolder");
                 if (AutoOpenOutputFolder) parts.Add("Open Folder");
@@ -2105,6 +2174,7 @@ namespace Fujify.ViewModels
                     OnPropertyChanged(nameof(FormattedOutputFolderPath));
                     OnPropertyChanged(nameof(HasCustomOutputFolder));
                     OnPropertyChanged(nameof(OutputDestinationSummary));
+                    OnPropertyChanged(nameof(SubfolderPreview));
                 }
             }
         }
@@ -2377,15 +2447,18 @@ namespace Fujify.ViewModels
 
         public async Task AddFilesAsync(IEnumerable<string> fileOrFolderPaths)
         {
-            IsLoading = true;
-            IsImporting = true;
-            ImportProgress = 0;
-            ImportStatusText = "Scanning folders and files...";
-            IsProgressVisible = true;
-            ProgressValue = 0;
+            await _importSemaphore.WaitAsync();
             try
             {
-                var inputList = fileOrFolderPaths.ToList();
+                IsLoading = true;
+                IsImporting = true;
+                ImportProgress = 0;
+                ImportStatusText = "Scanning folders and files...";
+                IsProgressVisible = true;
+                ProgressValue = 0;
+                try
+                {
+                    var inputList = fileOrFolderPaths.ToList();
                 var filesToAdd = new List<string>();
 
                 await Task.Run(() =>
@@ -2594,6 +2667,11 @@ namespace Fujify.ViewModels
                 }
                 OnPropertyChanged(nameof(OverallStatusText));
                 OnPropertyChanged(nameof(ImportPercentText));
+            }
+            }
+            finally
+            {
+                _importSemaphore.Release();
             }
         }
 
@@ -3024,6 +3102,26 @@ namespace Fujify.ViewModels
             return newFilePath;
         }
 
+        internal async Task<bool> ProcessSingleFileAsync(
+            string filePath,
+            string? outputFolder,
+            bool createBackup,
+            ConflictChoice conflictChoice,
+            HashSet<string> reservedOutputPaths,
+            CancellationToken ct)
+        {
+            var conflictLock = new SemaphoreSlim(1, 1);
+            return await ProcessSingleFileAsync(
+                filePath,
+                createBackup,
+                outputFolder,
+                conflictLock,
+                () => conflictChoice,
+                _ => { },
+                reservedOutputPaths,
+                ct);
+        }
+
         private async Task<bool> ProcessSingleFileAsync(
             string filePath,
             bool createBackup,
@@ -3178,6 +3276,26 @@ namespace Fujify.ViewModels
                         throw new InvalidOperationException(err);
                     }
 
+                    if (_settingsService.Settings.VerifyFileIntegrity)
+                    {
+                        UpdateFileStatus(filePath, "Verifying file integrity");
+                        var integrity = await _fileIntegrityService.VerifyIntegrityAsync(finalDestFilePath, ct);
+                        if (!integrity.IsValid)
+                        {
+                            string err = $"File integrity check failed: {integrity.ErrorMessage}";
+                            UpdateFileStatus(filePath, err);
+                            if (File.Exists(finalDestFilePath) && !string.Equals(Path.GetFullPath(sourceForPatch), Path.GetFullPath(finalDestFilePath), StringComparison.OrdinalIgnoreCase))
+                            {
+                                try { File.Delete(finalDestFilePath); } catch { }
+                            }
+                            if (isExactSameFilePath && createBackup && isSameFolder && File.Exists(sourceForPatch) && !File.Exists(filePath))
+                            {
+                                try { File.Move(sourceForPatch, filePath); } catch { }
+                            }
+                            throw new InvalidOperationException(err);
+                        }
+                    }
+
                     if (!createBackup && !string.Equals(Path.GetFullPath(sourceForPatch), Path.GetFullPath(finalDestFilePath), StringComparison.OrdinalIgnoreCase))
                     {
                         FileTrashHelper.SendToTrash(sourceForPatch);
@@ -3229,6 +3347,22 @@ namespace Fujify.ViewModels
                     throw new InvalidOperationException(err);
                 }
 
+                if (_settingsService.Settings.VerifyFileIntegrity)
+                {
+                    UpdateFileStatus(filePath, "Verifying file integrity");
+                    var integrity = await _fileIntegrityService.VerifyIntegrityAsync(finalDestFilePath, ct);
+                    if (!integrity.IsValid)
+                    {
+                        string err = $"File integrity check failed: {integrity.ErrorMessage}";
+                        UpdateFileStatus(filePath, err);
+                        if (File.Exists(finalDestFilePath) && !string.Equals(Path.GetFullPath(filePath), Path.GetFullPath(finalDestFilePath), StringComparison.OrdinalIgnoreCase))
+                        {
+                            try { File.Delete(finalDestFilePath); } catch { }
+                        }
+                        throw new InvalidOperationException(err);
+                    }
+                }
+
                 if (!createBackup)
                 {
                     FileTrashHelper.SendToTrash(filePath);
@@ -3277,16 +3411,26 @@ namespace Fujify.ViewModels
                     UpdateFileStatus(filePath, "Converting to DNG");
                     bool embedOriginalRaw = _settingsService.Settings.EmbedOriginalRaw;
 
-                    string targetDngForConversion;
-                    if (string.IsNullOrEmpty(outputFolder) && !_settingsService.Settings.CreateSubfolder)
+                    // Ensure target output directory exists before conversion
+                    string? targetDir = Path.GetDirectoryName(finalDestFilePath);
+                    if (!string.IsNullOrEmpty(targetDir) && !Directory.Exists(targetDir))
                     {
-                        targetDngForConversion = finalDestFilePath;
+                        try
+                        {
+                            Directory.CreateDirectory(targetDir);
+                        }
+                        catch (Exception ex)
+                        {
+                            if (OperatingSystem.IsAndroid())
+                            {
+                                DialogService.PlatformEnsurePermissionsCallback?.Invoke();
+                            }
+                            throw new UnauthorizedAccessException($"Cannot create output directory '{targetDir}': {ex.Message}.", ex);
+                        }
                     }
-                    else
-                    {
-                        string sourceDir = Path.GetDirectoryName(filePath) ?? string.Empty;
-                        targetDngForConversion = Path.Combine(sourceDir, $"{Path.GetFileNameWithoutExtension(filePath)}_tmp_{Guid.NewGuid():N}.dng");
-                    }
+
+                    // Directly convert into the final destination path without intermediate source-dir temp files
+                    string targetDngForConversion = finalDestFilePath;
 
                     bool useLossless = _licenseService.IsPro && _settingsService.Settings.LosslessCompression;
                     var convResult = await Task.Run(() => _rawConverterService.ConvertToDng(
@@ -3340,6 +3484,34 @@ namespace Fujify.ViewModels
 
                 if (metaResult.Success)
                 {
+                    string targetToVerify = !string.IsNullOrEmpty(tempInPlaceOutputFile)
+                        ? tempInPlaceOutputFile
+                        : finalDestFilePath;
+
+                    if (_settingsService.Settings.VerifyFileIntegrity)
+                    {
+                        UpdateFileStatus(filePath, "Verifying file integrity");
+                        var integrity = await _fileIntegrityService.VerifyIntegrityAsync(targetToVerify, ct);
+                        if (!integrity.IsValid)
+                        {
+                            string err = $"File integrity check failed: {integrity.ErrorMessage}";
+                            UpdateFileStatus(filePath, err);
+                            if (!string.IsNullOrEmpty(tempInPlaceOutputFile) && File.Exists(tempInPlaceOutputFile))
+                            {
+                                try { File.Delete(tempInPlaceOutputFile); } catch { }
+                            }
+                            if (!isOriginallyDng && !string.IsNullOrEmpty(finalDestFilePath) && File.Exists(finalDestFilePath))
+                            {
+                                try { File.Delete(finalDestFilePath); } catch { }
+                            }
+                            if (isOriginallyDng && createBackup && isSameFolder && !string.IsNullOrEmpty(origBackupPath) && File.Exists(origBackupPath) && !File.Exists(filePath))
+                            {
+                                try { File.Move(origBackupPath, filePath); } catch { }
+                            }
+                            throw new InvalidOperationException(err);
+                        }
+                    }
+
                     if (!string.IsNullOrEmpty(tempInPlaceOutputFile))
                     {
                         // Original in-place DNG: send original to trash, then move temporary file to final path
@@ -3373,6 +3545,10 @@ namespace Fujify.ViewModels
                 }
                 else
                 {
+                    if (!isOriginallyDng && !string.IsNullOrEmpty(finalDestFilePath) && File.Exists(finalDestFilePath))
+                    {
+                        try { File.Delete(finalDestFilePath); } catch { }
+                    }
                     if (!string.IsNullOrEmpty(tempInPlaceOutputFile) && File.Exists(tempInPlaceOutputFile))
                     {
                         try { File.Delete(tempInPlaceOutputFile); } catch { }
@@ -3388,6 +3564,10 @@ namespace Fujify.ViewModels
             }
             catch
             {
+                if (!isOriginallyDng && !string.IsNullOrEmpty(finalDestFilePath) && File.Exists(finalDestFilePath))
+                {
+                    try { File.Delete(finalDestFilePath); } catch { }
+                }
                 if (!string.IsNullOrEmpty(tempInPlaceOutputFile) && File.Exists(tempInPlaceOutputFile))
                 {
                     try { File.Delete(tempInPlaceOutputFile); } catch { }

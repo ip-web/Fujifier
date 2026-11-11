@@ -8,19 +8,13 @@
         WindowStartupLocation="CenterOwner"
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaTitleBarHeightHint="0"
-        WindowDecorations="None"
-        TransparencyLevelHint="Transparent"
-        Background="Transparent"
+        WindowDecorations="BorderOnly"
+        Background="{DynamicResource AppSurfaceBrush}"
         Icon="/Assets/images/logo.ico">
 
     <!-- Standalone Dialog Card Block -->
     <Border Classes="dialog-card"
-            Background="{DynamicResource AppSurfaceBrush}"
-            BorderBrush="{DynamicResource AppEdgeBrush}"
-            BorderThickness="1"
-            CornerRadius="16"
             Padding="22"
-            ClipToBounds="True"
             PointerPressed="Window_PointerPressed">
         <Grid RowDefinitions="Auto,*,Auto">
             <!-- Header with Logo and Close X -->
@@ -28,7 +22,7 @@
                 <StackPanel HorizontalAlignment="Center" Spacing="6">
                     <Image Source="/Assets/images/logoXL.png" Width="52" Height="52" HorizontalAlignment="Center"/>
                     <TextBlock Text="Fujifier" FontSize="19" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Version 2.3.0 (Cross-Platform)" FontSize="11" 
+                    <TextBlock Text="Version 2.2.0 (Cross-Platform)" FontSize="11" 
                                Foreground="{DynamicResource AppTextSecondaryBrush}" HorizontalAlignment="Center"/>
                 </StackPanel>
                 <Button HorizontalAlignment="Right" VerticalAlignment="Top" Click="Close_Click"
@@ -71,31 +65,6 @@
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
                                     FontSize="11" Height="30" Padding="0" CornerRadius="15" Margin="4,0,0,0"/>
                         </Grid>
-
-                        <Separator Margin="0,2" Background="{DynamicResource AppEdgeBrush}"/>
-
-                        <!-- Camera Compatibility -->
-                        <TextBlock Text="{loc:Loc CameraCompatibility}" FontWeight="SemiBold" FontSize="11.5"
-                                   Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                        <TextBlock Text="{loc:Loc NonWorkingCameras}" FontSize="10" FontWeight="SemiBold"
-                                   Foreground="{DynamicResource AppDangerBrush}"/>
-                        <StackPanel Margin="6,0,0,0" Spacing="2">
-                            <TextBlock Text="• Canon G1" FontSize="9.5" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
-                            <TextBlock Text="• Nikon e5700" FontSize="9.5" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
-                            <TextBlock Text="• Canon PowerShot Pro70" FontSize="9.5" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
-                        </StackPanel>
-
-                        <TextBlock Text="{loc:Loc UnsupportedRawFormats}" FontSize="10" FontWeight="SemiBold"
-                                   Foreground="{DynamicResource AppDangerBrush}" Margin="0,3,0,0"/>
-                        <StackPanel Margin="6,0,0,0" Spacing="2">
-                            <TextBlock Text="{loc:Loc NikonHighEfficiencyWarning}" FontSize="9.5" Foreground="{DynamicResource AppTextSecondaryBrush}" TextWrapping="Wrap" LineHeight="14"/>
-                        </StackPanel>
-
-                        <TextBlock Text="{loc:Loc PartiallyWorkingCameras}" FontSize="10" FontWeight="SemiBold"
-                                   Foreground="{DynamicResource AppAccentLightBrush}" Margin="0,3,0,0"/>
-                        <StackPanel Margin="6,0,0,0" Spacing="2">
-                            <TextBlock Text="• Hasselblad Flash sync" FontSize="9.5" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
-                        </StackPanel>
 
                         <Separator Margin="0,2" Background="{DynamicResource AppEdgeBrush}"/>
 

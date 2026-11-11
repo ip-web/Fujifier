@@ -44,9 +44,9 @@ $infoPlist = @"
     <key>CFBundleIdentifier</key>
     <string>dev.ipweb.fujifier</string>
     <key>CFBundleVersion</key>
-    <string>2.3.0</string>
+    <string>2.2.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.3.0</string>
+    <string>2.2.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
@@ -59,6 +59,48 @@ $infoPlist = @"
     <true/>
     <key>LSMinimumSystemVersion</key>
     <string>11.0</string>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Camera RAW Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.camera-raw-image</string>
+                <string>com.adobe.raw-image</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>arw</string>
+                <string>cr2</string>
+                <string>cr3</string>
+                <string>crw</string>
+                <string>dng</string>
+                <string>nef</string>
+                <string>nrw</string>
+                <string>orf</string>
+                <string>raf</string>
+                <string>rw2</string>
+                <string>pef</string>
+                <string>srw</string>
+                <string>srf</string>
+                <string>sr2</string>
+                <string>3fr</string>
+                <string>erf</string>
+                <string>kdc</string>
+                <string>dcs</string>
+                <string>dcr</string>
+                <string>iiq</string>
+                <string>mos</string>
+                <string>mef</string>
+                <string>mrw</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>
 "@
@@ -106,8 +148,16 @@ if ($macDngLab) {
 Copy-Item -Path "$repoRoot\Fujify\Assets\images\logo.ico" -Destination (Join-Path $resourcesDir "logo.ico") -Force
 Copy-Item -Path "$repoRoot\Fujify\Assets\images\logos.png" -Destination (Join-Path $resourcesDir "logo.png") -Force
 
+# Copy Quick Actions
+$repoQuickActions = if (Test-Path "$repoRoot\Fujify\Assets\QuickActions") { "$repoRoot\Fujify\Assets\QuickActions" } elseif (Test-Path "$repoRoot\build_assets\mac\QuickActions") { "$repoRoot\build_assets\mac\QuickActions" } else { $null }
+if ($repoQuickActions) {
+    $qaDir = Join-Path $resourcesDir "QuickActions"
+    New-Item -ItemType Directory -Force -Path $qaDir | Out-Null
+    Copy-Item -Path "$repoQuickActions\*" -Destination $qaDir -Recurse -Force
+}
+
 # Archive macOS Apple Silicon
-$macArmArchive = Join-Path $releaseDir "Fujifier-v2.3.0-macOS-AppleSilicon.zip"
+$macArmArchive = Join-Path $releaseDir "Fujifier-v2.2.0-macOS-AppleSilicon.zip"
 if (Test-Path $macArmArchive) { Remove-Item -Force $macArmArchive }
 & tar -a -cf $macArmArchive -C $distDir "Fujifier.app"
 Write-Host " Created macOS Apple Silicon Archive: $macArmArchive" -ForegroundColor Green
@@ -183,8 +233,15 @@ exit 127
 Copy-Item -Path "$repoRoot\Fujify\Assets\images\logo.ico" -Destination (Join-Path $intelResourcesDir "logo.ico") -Force
 Copy-Item -Path "$repoRoot\Fujify\Assets\images\logos.png" -Destination (Join-Path $intelResourcesDir "logo.png") -Force
 
+# Copy Quick Actions
+if ($repoQuickActions) {
+    $intelQaDir = Join-Path $intelResourcesDir "QuickActions"
+    New-Item -ItemType Directory -Force -Path $intelQaDir | Out-Null
+    Copy-Item -Path "$repoQuickActions\*" -Destination $intelQaDir -Recurse -Force
+}
+
 # Archive macOS Intel
-$macIntelArchive = Join-Path $releaseDir "Fujifier-v2.3.0-macOS-Intel.zip"
+$macIntelArchive = Join-Path $releaseDir "Fujifier-v2.2.0-macOS-Intel.zip"
 if (Test-Path $macIntelArchive) { Remove-Item -Force $macIntelArchive }
 & tar -a -cf $macIntelArchive -C $distDir "Fujifier-Intel.app"
 Write-Host " Created macOS Intel Archive: $macIntelArchive" -ForegroundColor Green

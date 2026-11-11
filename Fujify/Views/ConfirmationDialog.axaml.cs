@@ -13,6 +13,7 @@ namespace Fujify.Views
         public ConfirmationDialog()
         {
             InitializeComponent();
+            Common.NativeWindowHelper.ConfigureDialogWindow(this);
         }
 
         public ConfirmationDialog(string title, string message, string? confirmText = null, string? cancelText = null) : this()

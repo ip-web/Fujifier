@@ -268,6 +268,9 @@
 
         <!-- Standalone Dialog Windows Smooth Entrance Animation -->
         <Style Selector="Border.dialog-card">
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="0"/>
             <Style.Animations>
                 <Animation Duration="0:0:0.2" FillMode="Forward" Easing="CubicEaseOut">
                     <KeyFrame Cue="0%">
@@ -661,6 +664,7 @@
         </Style>
 
         <Style Selector="Border.bottom-sheet">
+            <Setter Property="BoxShadow" Value="0 -8 28 0 #70000000"/>
             <Setter Property="RenderTransform" Value="translateY(720px)"/>
             <Setter Property="Transitions">
                 <Transitions>
@@ -686,6 +690,7 @@
         </Style>
 
         <Style Selector="Border.modal-card">
+            <Setter Property="BoxShadow" Value="0 14 40 0 #B0000000, 0 3 10 0 #60000000"/>
             <Setter Property="Opacity" Value="0.0"/>
             <Setter Property="RenderTransform" Value="scale(0.92) translateY(12px)"/>
             <Setter Property="RenderTransformOrigin" Value="50%,50%"/>
@@ -699,6 +704,24 @@
         <Style Selector="Border.modal-card.open">
             <Setter Property="Opacity" Value="1.0"/>
             <Setter Property="RenderTransform" Value="scale(1.0) translateY(0px)"/>
+        </Style>
+
+        <!-- Dialog and Preferences Windows: Completely hide drawn decorations and caption buttons -->
+        <Style Selector="Window.no-caption WindowDrawnDecorations /template/ Button">
+            <Setter Property="IsVisible" Value="False"/>
+            <Setter Property="Width" Value="0"/>
+            <Setter Property="MaxWidth" Value="0"/>
+            <Setter Property="Height" Value="0"/>
+            <Setter Property="MaxHeight" Value="0"/>
+            <Setter Property="Opacity" Value="0"/>
+        </Style>
+        <Style Selector="Window.no-caption WindowDrawnDecorations Button">
+            <Setter Property="IsVisible" Value="False"/>
+            <Setter Property="Width" Value="0"/>
+            <Setter Property="MaxWidth" Value="0"/>
+            <Setter Property="Height" Value="0"/>
+            <Setter Property="MaxHeight" Value="0"/>
+            <Setter Property="Opacity" Value="0"/>
         </Style>
 
         <!-- Windows Standard Caption Buttons (Minimize, Maximize, Close) -->

@@ -11,6 +11,7 @@ namespace Fujify.Views
         public MessageDialog()
         {
             InitializeComponent();
+            Common.NativeWindowHelper.ConfigureDialogWindow(this);
         }
 
         public MessageDialog(string title, string message, bool isSuccess = true) : this()

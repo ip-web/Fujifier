@@ -293,7 +293,8 @@ namespace Fujify.Services
             string? customOutputFilePath)
         {
             string baseArguments = CommonArgs;
-            bool useOutputPath = !string.IsNullOrEmpty(outputFolder) || !string.IsNullOrEmpty(customOutputFilePath);
+            bool useOutputPath = (!string.IsNullOrEmpty(outputFolder) || !string.IsNullOrEmpty(customOutputFilePath))
+                && !string.Equals(dngFilePath, customOutputFilePath, StringComparison.OrdinalIgnoreCase);
             string? outputFilePath = null;
 
             if (useOutputPath)
@@ -388,7 +389,8 @@ namespace Fujify.Services
             CancellationToken cancellationToken)
         {
             string baseArguments = CommonArgs;
-            bool useOutputPath = !string.IsNullOrEmpty(outputFolder) || !string.IsNullOrEmpty(customOutputFilePath);
+            bool useOutputPath = (!string.IsNullOrEmpty(outputFolder) || !string.IsNullOrEmpty(customOutputFilePath))
+                && !string.Equals(dngFilePath, customOutputFilePath, StringComparison.OrdinalIgnoreCase);
             string? outputFilePath = null;
 
             if (useOutputPath)

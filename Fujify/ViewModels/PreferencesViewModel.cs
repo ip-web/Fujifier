@@ -35,6 +35,16 @@ using Fujify.Views;
 
 namespace Fujify.ViewModels
 {
+    public enum PreferencesTab
+    {
+        General,
+        Performance,
+        FileHandling,
+        Experimental,
+        License,
+        Updates
+    }
+
     public class PreferencesViewModel : ObservableObject
     {
         private readonly ISettingsService _settingsService;
@@ -48,6 +58,7 @@ namespace Fujify.ViewModels
         private bool _isDarkTheme;
         private bool _backupOriginalFile = true;
         private bool _embedOriginalRaw;
+        private bool _verifyFileIntegrity;
         private bool _skipThumbnailGeneration;
         private bool _losslessCompression = true;
         private int _maxConcurrentConversions;
@@ -258,11 +269,32 @@ namespace Fujify.ViewModels
             }
         }
 
-        public string SubfolderPreview => CreateSubfolder
-            ? (SubfolderUseOriginalName
-                ? $"Photos → Photos/{(!string.IsNullOrEmpty(_subfolderSuffix) ? "Photos" + _subfolderSuffix : "Photos")}/"
-                : $"Photos → Photos/{(!string.IsNullOrWhiteSpace(_subfolderCustomName) ? _subfolderCustomName : "Fujified")}/")
-            : string.Empty;
+        private string GetEffectiveBaseFolderName()
+        {
+            string? customOutput = _settingsService?.Settings?.CustomOutputFolder;
+            if (!string.IsNullOrWhiteSpace(customOutput))
+            {
+                var name = Path.GetFileName(customOutput.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    return name;
+                }
+            }
+            return "Photos";
+        }
+
+        public string SubfolderPreview
+        {
+            get
+            {
+                if (!CreateSubfolder) return string.Empty;
+                string folder = GetEffectiveBaseFolderName();
+                string subName = SubfolderUseOriginalName
+                    ? (!string.IsNullOrEmpty(_subfolderSuffix) ? folder + _subfolderSuffix : folder)
+                    : (!string.IsNullOrWhiteSpace(_subfolderCustomName) ? _subfolderCustomName : "Fujified");
+                return $"{folder} → {folder}/{subName}/";
+            }
+        }
 
         public bool AutoOpenOutputFolder
         {
@@ -343,6 +375,16 @@ namespace Fujify.ViewModels
         }
 
         public bool IsWindows => OperatingSystem.IsWindows();
+        public bool IsMacOS => OperatingSystem.IsMacOS();
+        public bool IsContextMenuSupported => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS();
+
+        public string ContextMenuTitle => OperatingSystem.IsMacOS()
+            ? (Localization.LocalizationManager.Instance["MacQuickActionTitle"] ?? "Finder Quick Actions (Fujifier)")
+            : (Localization.LocalizationManager.Instance["WindowsContextMenuTitle"] ?? "Windows Context Menu (Fujifier)");
+
+        public string ContextMenuDesc => OperatingSystem.IsMacOS()
+            ? (Localization.LocalizationManager.Instance["MacQuickActionDesc"] ?? "Adds 'Fujifier' quick conversion options ('Convert with previous' and 'Convert with options') to Finder Quick Actions and Preview pane")
+            : (Localization.LocalizationManager.Instance["WindowsContextMenuDesc"] ?? "Adds 'Fujifier' quick conversion options ('Convert with previous' and 'Convert with options') to right-click menu on RAW files");
 
         public bool IsWindowsContextMenuEnabled
         {
@@ -351,7 +393,9 @@ namespace Fujify.ViewModels
             {
                 if (value && !_licenseService.IsPro)
                 {
-                    LicenseMessageText = "Windows Explorer context menu integration is exclusive to Fujifier Pro.";
+                    LicenseMessageText = OperatingSystem.IsMacOS()
+                        ? "macOS Finder Quick Actions integration is exclusive to Fujifier Pro."
+                        : "Windows Explorer context menu integration is exclusive to Fujifier Pro.";
                     LicenseMessageColor = "#F39C12";
                     HasLicenseMessage = true;
                     OnPropertyChanged(nameof(IsWindowsContextMenuEnabled));
@@ -676,6 +720,12 @@ namespace Fujify.ViewModels
             set => SetProperty(ref _embedOriginalRaw, value);
         }
 
+        public bool VerifyFileIntegrity
+        {
+            get => _verifyFileIntegrity;
+            set => SetProperty(ref _verifyFileIntegrity, value);
+        }
+
         public bool IsOpenInCaptureOneSupported => !OperatingSystem.IsAndroid();
 
         public bool AutoOpenInLightroom
@@ -821,6 +871,52 @@ namespace Fujify.ViewModels
         public ICommand OpenDngLabDbCommand { get; }
         public ICommand OpenLatestFailureLogCommand { get; }
 
+        public ICommand SelectGeneralTabCommand { get; }
+        public ICommand SelectPerformanceTabCommand { get; }
+        public ICommand SelectFileHandlingTabCommand { get; }
+        public ICommand SelectExperimentalTabCommand { get; }
+        public ICommand SelectLicenseTabCommand { get; }
+        public ICommand SelectUpdatesTabCommand { get; }
+
+        private PreferencesTab _selectedTab = PreferencesTab.General;
+        public PreferencesTab SelectedTab
+        {
+            get => _selectedTab;
+            set
+            {
+                if (SetProperty(ref _selectedTab, value))
+                {
+                    OnPropertyChanged(nameof(IsGeneralTabSelected));
+                    OnPropertyChanged(nameof(IsPerformanceTabSelected));
+                    OnPropertyChanged(nameof(IsFileHandlingTabSelected));
+                    OnPropertyChanged(nameof(IsExperimentalTabSelected));
+                    OnPropertyChanged(nameof(IsLicenseTabSelected));
+                    OnPropertyChanged(nameof(IsUpdatesTabSelected));
+                    OnPropertyChanged(nameof(CurrentSectionTitle));
+                }
+            }
+        }
+
+        public bool IsGeneralTabSelected => SelectedTab == PreferencesTab.General;
+        public bool IsPerformanceTabSelected => SelectedTab == PreferencesTab.Performance;
+        public bool IsFileHandlingTabSelected => SelectedTab == PreferencesTab.FileHandling;
+        public bool IsExperimentalTabSelected => SelectedTab == PreferencesTab.Experimental;
+        public bool IsLicenseTabSelected => SelectedTab == PreferencesTab.License;
+        public bool IsUpdatesTabSelected => SelectedTab == PreferencesTab.Updates;
+
+        public string CurrentSectionTitle => SelectedTab switch
+        {
+            PreferencesTab.General => LocalizationManager.Tr("General"),
+            PreferencesTab.Performance => LocalizationManager.Tr("Performance"),
+            PreferencesTab.FileHandling => LocalizationManager.Tr("FileHandling"),
+            PreferencesTab.Experimental => LocalizationManager.Tr("ExperimentalFeaturesTitle"),
+            PreferencesTab.License => LocalizationManager.Tr("LicenseAndPlan"),
+            PreferencesTab.Updates => LocalizationManager.Tr("Updates"),
+            _ => LocalizationManager.Tr("Settings")
+        };
+
+        public void SelectTab(PreferencesTab tab) => SelectedTab = tab;
+
         public Action<bool>? CloseAction { get; set; }
 
         public ICommand InstallLightroomPresetsCommand { get; }
@@ -916,6 +1012,7 @@ namespace Fujify.ViewModels
             _isDarkTheme = _themeMode != "Light";
             _backupOriginalFile = settings.BackupOriginalFile;
             _embedOriginalRaw = settings.EmbedOriginalRaw;
+            _verifyFileIntegrity = settings.VerifyFileIntegrity;
             _skipThumbnailGeneration = settings.SkipThumbnailGeneration;
             _autoOpenInLightroom = settings.AutoOpenInLightroom;
             _autoOpenInCaptureOne = settings.AutoOpenInCaptureOne;
@@ -927,8 +1024,20 @@ namespace Fujify.ViewModels
             _subfolderSuffix = settings.SubfolderSuffix ?? "-fujified";
             _subfolderCustomName = string.IsNullOrWhiteSpace(settings.SubfolderCustomName) ? "Fujified" : settings.SubfolderCustomName;
             _autoOpenOutputFolder = settings.AutoOpenOutputFolder;
-            _isWindowsContextMenuEnabled = OperatingSystem.IsWindows() && _licenseService.IsPro &&
-                (WindowsContextMenuService.IsContextMenuRegistered() || settings.EnableWindowsContextMenu);
+            if (OperatingSystem.IsWindows())
+            {
+                _isWindowsContextMenuEnabled = _licenseService.IsPro &&
+                    (WindowsContextMenuService.IsContextMenuRegistered() || settings.EnableWindowsContextMenu);
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                _isWindowsContextMenuEnabled = _licenseService.IsPro &&
+                    (MacQuickActionService.AreQuickActionsRegistered() || settings.EnableWindowsContextMenu);
+            }
+            else
+            {
+                _isWindowsContextMenuEnabled = false;
+            }
 
             int saved = settings.MaxConcurrentConversions;
             if (saved <= 0 || saved > TotalThreads) saved = DefaultConcurrency;
@@ -972,6 +1081,20 @@ namespace Fujify.ViewModels
 
             SetKeyTabCommand = new RelayCommand(() => IsAccountTabActive = false);
             SetAccountTabCommand = new RelayCommand(() => IsAccountTabActive = true);
+
+            SelectGeneralTabCommand = new RelayCommand(() => SelectedTab = PreferencesTab.General);
+            SelectPerformanceTabCommand = new RelayCommand(() => SelectedTab = PreferencesTab.Performance);
+            SelectFileHandlingTabCommand = new RelayCommand(() => SelectedTab = PreferencesTab.FileHandling);
+            SelectExperimentalTabCommand = new RelayCommand(() => SelectedTab = PreferencesTab.Experimental);
+            SelectLicenseTabCommand = new RelayCommand(() => SelectedTab = PreferencesTab.License);
+            SelectUpdatesTabCommand = new RelayCommand(() => SelectedTab = PreferencesTab.Updates);
+
+            LocalizationManager.Instance.LanguageChanged += (s, e) =>
+            {
+                OnPropertyChanged(nameof(CurrentSectionTitle));
+                OnPropertyChanged(nameof(ContextMenuTitle));
+                OnPropertyChanged(nameof(ContextMenuDesc));
+            };
 
             LoginWithGoogleCommand = new AsyncRelayCommand(async () =>
             {
@@ -1300,6 +1423,7 @@ namespace Fujify.ViewModels
             s.ThemeMode = _themeMode;
             s.BackupOriginalFile = _backupOriginalFile;
             s.EmbedOriginalRaw = _embedOriginalRaw;
+            s.VerifyFileIntegrity = _verifyFileIntegrity;
             s.SkipThumbnailGeneration = _skipThumbnailGeneration;
             s.LosslessCompression = _licenseService.IsPro && _losslessCompression;
             s.MaxConcurrentConversions = _licenseService.IsPro ? _maxConcurrentConversions : 1;
@@ -1334,6 +1458,19 @@ namespace Fujify.ViewModels
                     s.EnableWindowsContextMenu = false;
                 }
             }
+            else if (OperatingSystem.IsMacOS())
+            {
+                if (_isWindowsContextMenuEnabled && _licenseService.IsPro)
+                {
+                    MacQuickActionService.RegisterQuickActions();
+                    s.EnableWindowsContextMenu = true;
+                }
+                else if (s.EnableWindowsContextMenu || MacQuickActionService.AreQuickActionsRegistered())
+                {
+                    MacQuickActionService.UnregisterQuickActions();
+                    s.EnableWindowsContextMenu = false;
+                }
+            }
 
             _settingsService.Save();
             App.ApplyTheme(_themeMode);
@@ -1352,6 +1489,7 @@ namespace Fujify.ViewModels
             _isDarkTheme = _themeMode != "Light";
             _backupOriginalFile = settings.BackupOriginalFile;
             _embedOriginalRaw = settings.EmbedOriginalRaw;
+            _verifyFileIntegrity = settings.VerifyFileIntegrity;
             _skipThumbnailGeneration = settings.SkipThumbnailGeneration;
             _autoOpenInLightroom = settings.AutoOpenInLightroom;
             _autoOpenInCaptureOne = settings.AutoOpenInCaptureOne;
@@ -1363,8 +1501,20 @@ namespace Fujify.ViewModels
             _subfolderSuffix = settings.SubfolderSuffix ?? "-fujified";
             _subfolderCustomName = string.IsNullOrWhiteSpace(settings.SubfolderCustomName) ? "Fujified" : settings.SubfolderCustomName;
             _autoOpenOutputFolder = settings.AutoOpenOutputFolder;
-            _isWindowsContextMenuEnabled = OperatingSystem.IsWindows() && _licenseService.IsPro &&
-                (WindowsContextMenuService.IsContextMenuRegistered() || settings.EnableWindowsContextMenu);
+            if (OperatingSystem.IsWindows())
+            {
+                _isWindowsContextMenuEnabled = _licenseService.IsPro &&
+                    (WindowsContextMenuService.IsContextMenuRegistered() || settings.EnableWindowsContextMenu);
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                _isWindowsContextMenuEnabled = _licenseService.IsPro &&
+                    (MacQuickActionService.AreQuickActionsRegistered() || settings.EnableWindowsContextMenu);
+            }
+            else
+            {
+                _isWindowsContextMenuEnabled = false;
+            }
 
             int saved = settings.MaxConcurrentConversions;
             if (saved <= 0 || saved > TotalThreads) saved = DefaultConcurrency;

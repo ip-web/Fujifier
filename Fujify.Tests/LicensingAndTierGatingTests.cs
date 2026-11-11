@@ -1063,7 +1063,7 @@ namespace Fujify.Tests
                 DeviceId = "test-device-123",
                 DeviceName = "My Camera Tablet",
                 Platform = platform,
-                AppVersion = "2.3.0",
+                AppVersion = "2.2.0",
                 LastCheckIn = "2026-11-03 04:00:00"
             };
 
@@ -1073,7 +1073,7 @@ namespace Fujify.Tests
             Assert.Equal(expectedIcon, vm.PlatformIcon);
             Assert.Equal(expectedDisplay, vm.PlatformDisplay);
             Assert.False(vm.IsCurrentDevice);
-            Assert.Contains("v2.3.0", vm.DisplaySubtitle);
+            Assert.Contains("v2.2.0", vm.DisplaySubtitle);
         }
 
         [Fact]
@@ -1085,7 +1085,7 @@ namespace Fujify.Tests
                 DeviceId = "current-id",
                 DeviceName = "Tom's MacBook",
                 Platform = "macos",
-                AppVersion = "2.3.0"
+                AppVersion = "2.2.0"
             };
 
             var vm = new LicenseDeviceItemViewModel(dto, isCurrentDevice: true);
@@ -1113,8 +1113,8 @@ namespace Fujify.Tests
                         used_activations = 2,
                         devices = new[]
                         {
-                            new { id = 10, license_id = 5, device_id = "device-1", device_name = "Tom's iPhone", platform = "ios", app_version = "2.3.0", last_check_in = "2026-11-03 02:00:00" },
-                            new { id = 11, license_id = 5, device_id = "device-2", device_name = "Studio PC", platform = "windows", app_version = "2.3.0", last_check_in = "2026-11-03 03:00:00" }
+                            new { id = 10, license_id = 5, device_id = "device-1", device_name = "Tom's iPhone", platform = "ios", app_version = "2.2.0", last_check_in = "2026-11-03 02:00:00" },
+                            new { id = 11, license_id = 5, device_id = "device-2", device_name = "Studio PC", platform = "windows", app_version = "2.2.0", last_check_in = "2026-11-03 03:00:00" }
                         }
                     };
                     return new HttpResponseMessage(HttpStatusCode.OK)
@@ -1164,7 +1164,7 @@ namespace Fujify.Tests
                         used_activations = 1,
                         devices = new[]
                         {
-                            new { id = 10, license_id = 5, device_id = "device-1", device_name = "Tom's iPhone", platform = "ios", app_version = "2.3.0", last_check_in = "2026-11-03 02:00:00" }
+                            new { id = 10, license_id = 5, device_id = "device-1", device_name = "Tom's iPhone", platform = "ios", app_version = "2.2.0", last_check_in = "2026-11-03 02:00:00" }
                         }
                     };
                     return new HttpResponseMessage(HttpStatusCode.OK)
@@ -1258,9 +1258,9 @@ namespace Fujify.Tests
                         used_activations = 3,
                         devices = new[]
                         {
-                            new { id = 1, license_id = 5, device_id = "dev-1", device_name = "MacBook Pro", platform = "macos", app_version = "2.3.0", last_check_in = "2026-11-03 01:00:00" },
-                            new { id = 2, license_id = 5, device_id = "dev-2", device_name = "Windows PC", platform = "windows", app_version = "2.3.0", last_check_in = "2026-11-03 01:00:00" },
-                            new { id = 3, license_id = 5, device_id = "dev-3", device_name = "iPhone 15", platform = "ios", app_version = "2.3.0", last_check_in = "2026-11-03 01:00:00" }
+                            new { id = 1, license_id = 5, device_id = "dev-1", device_name = "MacBook Pro", platform = "macos", app_version = "2.2.0", last_check_in = "2026-11-03 01:00:00" },
+                            new { id = 2, license_id = 5, device_id = "dev-2", device_name = "Windows PC", platform = "windows", app_version = "2.2.0", last_check_in = "2026-11-03 01:00:00" },
+                            new { id = 3, license_id = 5, device_id = "dev-3", device_name = "iPhone 15", platform = "ios", app_version = "2.2.0", last_check_in = "2026-11-03 01:00:00" }
                         }
                     };
                     return new HttpResponseMessage(HttpStatusCode.OK)

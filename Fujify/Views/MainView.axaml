@@ -2264,6 +2264,19 @@
                                         <ToggleSwitch Grid.Column="1" IsChecked="{Binding EmbedOriginalRaw}" OnContent="" OffContent=""/>
                                     </Grid>
 
+                                    <Separator Height="1" Background="{DynamicResource AppEdgeBrush}"/>
+
+                                    <!-- Verify File Integrity -->
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2" Margin="0,0,12,0">
+                                            <TextBlock Text="{loc:Loc VerifyFileIntegrity}" FontWeight="SemiBold" FontSize="12"
+                                                       Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                            <TextBlock Text="{loc:Loc VerifyFileIntegrityDesc}" FontSize="11"
+                                                       Foreground="{DynamicResource AppTextSecondaryBrush}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding VerifyFileIntegrity}" OnContent="" OffContent=""/>
+                                    </Grid>
+
                                     <Separator Height="1" Background="{DynamicResource AppEdgeBrush}" IsVisible="{Binding IsOpenInLightroomSupported}"/>
 
                                     <!-- Auto-open in Lightroom -->
@@ -2786,7 +2799,7 @@
                         <StackPanel HorizontalAlignment="Center" Spacing="6">
                             <Image Source="/Assets/images/logoXL.png" Width="52" Height="52" HorizontalAlignment="Center"/>
                             <TextBlock Text="Fujifier" FontSize="19" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}" HorizontalAlignment="Center"/>
-                            <TextBlock Text="Version 2.3.0 (Cross-Platform)" FontSize="11" 
+                            <TextBlock Text="Version 2.2.0 (Cross-Platform)" FontSize="11" 
                                        Foreground="{DynamicResource AppTextSecondaryBrush}" HorizontalAlignment="Center"/>
                         </StackPanel>
 
@@ -2820,42 +2833,6 @@
                                 <TextBlock Text="{loc:Loc DevelopedBy}" FontSize="10" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
                                 <TextBlock Text="{loc:Loc PoweredBy}" FontSize="10" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
                                 <TextBlock Text="{loc:Loc LicenseGpl}" FontSize="10" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Camera Compatibility Card -->
-                        <Border Background="{DynamicResource AppSurfaceSecondaryBrush}" 
-                                BorderBrush="{DynamicResource AppEdgeBrush}" BorderThickness="1"
-                                CornerRadius="12" Padding="14">
-                            <StackPanel Spacing="8">
-                                <TextBlock Text="{loc:Loc CameraCompatibility}" FontWeight="SemiBold" FontSize="12"
-                                           Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                                <TextBlock Text="{loc:Loc CameraCompatDesc}"
-                                           FontSize="10.5" Foreground="{DynamicResource AppTextSecondaryBrush}" TextWrapping="Wrap" LineHeight="15"/>
-                                
-                                <Separator Margin="0,2" Background="{DynamicResource AppEdgeBrush}"/>
-
-                                <TextBlock Text="{loc:Loc NonWorkingCameras}" FontSize="10.5" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource AppDangerBrush}"/>
-                                <StackPanel Margin="6,0,0,0" Spacing="2">
-                                    <TextBlock Text="• Canon G1" FontSize="10" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
-                                    <TextBlock Text="• Nikon e5700" FontSize="10" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
-                                    <TextBlock Text="• Canon PowerShot Pro70" FontSize="10" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
-                                </StackPanel>
-
-                                <TextBlock Text="{loc:Loc UnsupportedRawFormats}" FontSize="10.5" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource AppDangerBrush}" Margin="0,3,0,0"/>
-                                <StackPanel Margin="6,0,0,0" Spacing="2">
-                                    <TextBlock Text="{loc:Loc NikonHighEfficiencyWarning}" FontSize="10" Foreground="{DynamicResource AppTextSecondaryBrush}" TextWrapping="Wrap" LineHeight="14"/>
-                                </StackPanel>
-
-                                <Separator Margin="0,2" Background="{DynamicResource AppEdgeBrush}"/>
-
-                                <TextBlock Text="{loc:Loc PartiallyWorkingCameras}" FontSize="10.5" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource AppAccentLightBrush}"/>
-                                <StackPanel Margin="6,0,0,0" Spacing="2">
-                                    <TextBlock Text="• Hasselblad Flash sync" FontSize="10" Foreground="{DynamicResource AppTextSecondaryBrush}"/>
-                                </StackPanel>
                             </StackPanel>
                         </Border>
 

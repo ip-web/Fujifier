@@ -50,7 +50,7 @@ if ($Architecture -eq "All" -or $Architecture -eq "x64") {
     Write-Host "==========================================================" -ForegroundColor Cyan
 
     $publishDirX64 = Join-Path $repoRoot "publish\win-x64"
-    $distDirX64 = Join-Path $distDir "Fujifier-v2.3.0-Windows-x64"
+    $distDirX64 = Join-Path $distDir "Fujifier-v2.2.0-Windows-x64"
 
     New-Item -ItemType Directory -Force -Path $publishDirX64 | Out-Null
 
@@ -72,13 +72,13 @@ if ($Architecture -eq "All" -or $Architecture -eq "x64") {
 
     # Create Portable ZIP
     Write-Host "Creating Portable ZIP package for win-x64..." -ForegroundColor Cyan
-    $portableZipX64 = Join-Path $releaseDir "Fujifier-v2.3.0-Windows-x64-Portable.zip"
+    $portableZipX64 = Join-Path $releaseDir "Fujifier-v2.2.0-Windows-x64-Portable.zip"
     if (Test-Path $portableZipX64) { Remove-Item -Force $portableZipX64 }
     if (Test-Path $distDirX64) { Remove-Item -Recurse -Force $distDirX64 }
 
     New-Item -ItemType Directory -Force -Path $distDirX64 | Out-Null
     Copy-Item -Path "$publishDirX64\*" -Destination $distDirX64 -Recurse -Force
-    & tar.exe -a -cf $portableZipX64 -C $distDir "Fujifier-v2.3.0-Windows-x64"
+    & tar.exe -a -cf $portableZipX64 -C $distDir "Fujifier-v2.2.0-Windows-x64"
     Write-Host "-> Portable ZIP created: $portableZipX64" -ForegroundColor Green
 
     # Compile Inno Setup Installer
@@ -86,10 +86,10 @@ if ($Architecture -eq "All" -or $Architecture -eq "x64") {
         Write-Host "Compiling Inno Setup x64 installer..." -ForegroundColor Cyan
         & $iscc `
             /DMyAppSourceDir="publish\win-x64" `
-            /DMyOutputBaseFilename="Fujifier-v2.3.0-Setup" `
+            /DMyOutputBaseFilename="Fujifier-v2.2.0-Setup" `
             /DMyArchAllowed="x64compatible" `
             "$repoRoot\installer.iss"
-        Write-Host "-> Installer created: $(Join-Path $releaseDir 'Fujifier-v2.3.0-Setup.exe')" -ForegroundColor Green
+        Write-Host "-> Installer created: $(Join-Path $releaseDir 'Fujifier-v2.2.0-Setup.exe')" -ForegroundColor Green
     }
 }
 
@@ -102,7 +102,7 @@ if ($Architecture -eq "All" -or $Architecture -eq "arm64") {
     Write-Host "==========================================================" -ForegroundColor Cyan
 
     $publishDirArm64 = Join-Path $repoRoot "publish\win-arm64"
-    $distDirArm64 = Join-Path $distDir "Fujifier-v2.3.0-Windows-ARM64"
+    $distDirArm64 = Join-Path $distDir "Fujifier-v2.2.0-Windows-ARM64"
 
     New-Item -ItemType Directory -Force -Path $publishDirArm64 | Out-Null
 
@@ -129,13 +129,13 @@ if ($Architecture -eq "All" -or $Architecture -eq "arm64") {
 
     # Create Portable ZIP
     Write-Host "Creating Portable ZIP package for win-arm64..." -ForegroundColor Cyan
-    $portableZipArm64 = Join-Path $releaseDir "Fujifier-v2.3.0-Windows-ARM64-Portable.zip"
+    $portableZipArm64 = Join-Path $releaseDir "Fujifier-v2.2.0-Windows-ARM64-Portable.zip"
     if (Test-Path $portableZipArm64) { Remove-Item -Force $portableZipArm64 }
     if (Test-Path $distDirArm64) { Remove-Item -Recurse -Force $distDirArm64 }
 
     New-Item -ItemType Directory -Force -Path $distDirArm64 | Out-Null
     Copy-Item -Path "$publishDirArm64\*" -Destination $distDirArm64 -Recurse -Force
-    & tar.exe -a -cf $portableZipArm64 -C $distDir "Fujifier-v2.3.0-Windows-ARM64"
+    & tar.exe -a -cf $portableZipArm64 -C $distDir "Fujifier-v2.2.0-Windows-ARM64"
     Write-Host "-> Portable ZIP created: $portableZipArm64" -ForegroundColor Green
 
     # Compile Inno Setup Installer
@@ -143,10 +143,10 @@ if ($Architecture -eq "All" -or $Architecture -eq "arm64") {
         Write-Host "Compiling Inno Setup ARM64 installer..." -ForegroundColor Cyan
         & $iscc `
             /DMyAppSourceDir="publish\win-arm64" `
-            /DMyOutputBaseFilename="Fujifier-v2.3.0-Windows-ARM64-Setup" `
+            /DMyOutputBaseFilename="Fujifier-v2.2.0-Windows-ARM64-Setup" `
             /DMyArchAllowed="arm64" `
             "$repoRoot\installer.iss"
-        Write-Host "-> Installer created: $(Join-Path $releaseDir 'Fujifier-v2.3.0-Windows-ARM64-Setup.exe')" -ForegroundColor Green
+        Write-Host "-> Installer created: $(Join-Path $releaseDir 'Fujifier-v2.2.0-Windows-ARM64-Setup.exe')" -ForegroundColor Green
     }
 }
 

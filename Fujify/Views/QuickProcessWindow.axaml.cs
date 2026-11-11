@@ -29,6 +29,7 @@ namespace Fujify.Views
         public QuickProcessWindow()
         {
             InitializeComponent();
+            Common.NativeWindowHelper.ConfigureDialogWindow(this);
             Loaded += async (s, e) =>
             {
                 if (DataContext is QuickProcessViewModel vm)

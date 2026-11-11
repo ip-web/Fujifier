@@ -84,6 +84,18 @@ namespace Fujify.Tests
 
             var listSimsParsed = CommandLineArgs.Parse(new[] { "--list-simulations" });
             Assert.True(listSimsParsed.ListSimulations);
+
+            var unregParsed = CommandLineArgs.Parse(new[] { "--unregister-context-menu" });
+            Assert.True(unregParsed.UnregisterContextMenu);
+            Assert.True(unregParsed.IsCliMode);
+
+            var cleanParsed = CommandLineArgs.Parse(new[] { "--clean-context-menu" });
+            Assert.True(cleanParsed.UnregisterContextMenu);
+            Assert.True(cleanParsed.IsCliMode);
+
+            var regParsed = CommandLineArgs.Parse(new[] { "--register-context-menu" });
+            Assert.True(regParsed.RegisterContextMenu);
+            Assert.True(regParsed.IsCliMode);
         }
 
         [Fact]
@@ -93,6 +105,8 @@ namespace Fujify.Tests
             Assert.Equal(0, CliRunner.Run(new CommandLineArgs { ShowVersion = true }));
             Assert.Equal(0, CliRunner.Run(new CommandLineArgs { ListModels = true }));
             Assert.Equal(0, CliRunner.Run(new CommandLineArgs { ListSimulations = true }));
+            Assert.Equal(0, CliRunner.Run(new CommandLineArgs { UnregisterContextMenu = true }));
+            Assert.Equal(0, CliRunner.Run(new CommandLineArgs { RegisterContextMenu = true }));
         }
 
         [Fact]
@@ -128,24 +142,33 @@ namespace Fujify.Tests
                 Assert.NotNull(parentKey);
                 Assert.Equal("Fujifier", parentKey.GetValue("MUIVerb")?.ToString());
                 Assert.Equal(string.Empty, parentKey.GetValue("SubCommands")?.ToString());
-                Assert.Equal("Fujifier.Menu", parentKey.GetValue("ExtendedSubCommandsKey")?.ToString());
                 Assert.Null(parentKey.GetValue(null)); // Parent key (Default) must be unset for cascading menu to open
+                Assert.Null(parentKey.GetValue("ExtendedSubCommandsKey")); // Native inline cascading menu does not use external ProgID
+                Assert.Null(parentKey.GetValue("MultiSelectModel")); // No Document multi-select model to prevent ghost console windows
 
-                // Verify centralized menu key exists
-                using var centralizedKey = Registry.CurrentUser.OpenSubKey(@"Software\Classes\Fujifier.Menu\shell\01_convert_previous");
-                Assert.NotNull(centralizedKey);
+                string? iconVal = parentKey.GetValue("Icon")?.ToString();
+                Assert.NotNull(iconVal);
+                Assert.StartsWith("\"", iconVal); // Properly quoted for paths with spaces
+
+                // Verify * shell verb does NOT exist (prevents duplicate entries in Explorer)
+                using var starKey = Registry.CurrentUser.OpenSubKey(@"Software\Classes\*\shell\Fujifier");
+                Assert.Null(starKey);
+
+                // Verify centralized menu key does NOT exist
+                using var centralizedKey = Registry.CurrentUser.OpenSubKey(@"Software\Classes\Fujifier.Menu");
+                Assert.Null(centralizedKey);
 
                 // Verify direct extension key was removed to prevent collisions
                 using var directExtKey = Registry.CurrentUser.OpenSubKey(@"Software\Classes\.arw\shell\Fujifier");
                 Assert.Null(directExtKey);
 
-                // Verify 01_convert_previous
+                // Verify 01_convert_previous in native cascading menu
                 using var prevCmd = Registry.CurrentUser.OpenSubKey(@"Software\Classes\SystemFileAssociations\.arw\shell\Fujifier\shell\01_convert_previous\command");
                 Assert.NotNull(prevCmd);
                 string? prevVal = prevCmd.GetValue(null)?.ToString();
                 Assert.Contains("--convert-previous", prevVal);
 
-                // Verify 02_convert_options
+                // Verify 02_convert_options in native cascading menu
                 using var optCmd = Registry.CurrentUser.OpenSubKey(@"Software\Classes\SystemFileAssociations\.arw\shell\Fujifier\shell\02_convert_options\command");
                 Assert.NotNull(optCmd);
                 string? optVal = optCmd.GetValue(null)?.ToString();
@@ -155,6 +178,13 @@ namespace Fujify.Tests
                 bool unregResult = WindowsContextMenuService.UnregisterContextMenu();
                 Assert.True(unregResult, "UnregisterContextMenu should succeed");
                 Assert.False(WindowsContextMenuService.IsContextMenuRegistered(), "IsContextMenuRegistered should be false after unregistration");
+
+                using var starAfter = Registry.CurrentUser.OpenSubKey(@"Software\Classes\*\shell\Fujifier");
+                Assert.Null(starAfter);
+                using var menuAfter = Registry.CurrentUser.OpenSubKey(@"Software\Classes\Fujifier.Menu");
+                Assert.Null(menuAfter);
+                using var sfaAfter = Registry.CurrentUser.OpenSubKey(@"Software\Classes\SystemFileAssociations\.arw\shell\Fujifier");
+                Assert.Null(sfaAfter);
             }
             finally
             {
@@ -461,6 +491,9 @@ namespace Fujify.Tests
                 bool unregResult = WindowsContextMenuService.UnregisterOpenWith();
                 Assert.True(unregResult, "UnregisterOpenWith should succeed");
                 Assert.False(WindowsContextMenuService.IsOpenWithRegistered(), "IsOpenWithRegistered should be false after unregistration");
+                Assert.Null(Registry.CurrentUser.OpenSubKey($@"Software\Classes\Applications\{exeName}"));
+                Assert.Null(Registry.CurrentUser.OpenSubKey(@"Software\Classes\Fujifier.RAW"));
+                Assert.Null(Registry.CurrentUser.OpenSubKey($@"Software\Classes\SystemFileAssociations\.arw\OpenWithList\{exeName}"));
             }
             finally
             {
@@ -584,6 +617,23 @@ namespace Fujify.Tests
             Assert.False(vm.IsCaptureOneModeUnlocked);
             Assert.True(vm.HasCustomOutputFolder);
             Assert.Equal(@"C:\SavedDir", vm.OutputFolderPath);
+        }
+
+        [Fact]
+        public void QuickProcess_ShouldNotIncludeOpenInLightroomOption()
+        {
+            // Verify QuickProcessViewModel does not have an AutoOpenInLightroom or ShowOpenInLightroom property
+            var vmType = typeof(ViewModels.QuickProcessViewModel);
+            Assert.Null(vmType.GetProperty("AutoOpenInLightroom"));
+            Assert.Null(vmType.GetProperty("ShowOpenInLightroom"));
+
+            // Verify QuickProcessWindow.axaml does not contain OpenInLightroom binding or loc
+            string axamlPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Fujify", "Views", "QuickProcessWindow.axaml");
+            if (File.Exists(axamlPath))
+            {
+                string axamlContent = File.ReadAllText(axamlPath);
+                Assert.DoesNotContain("OpenInLightroom", axamlContent);
+            }
         }
     }
 }

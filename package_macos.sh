@@ -166,9 +166,9 @@ EOF
     <key>CFBundleIdentifier</key>
     <string>dev.ipweb.fujifier</string>
     <key>CFBundleVersion</key>
-    <string>2.3.0</string>
+    <string>2.2.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.3.0</string>
+    <string>2.2.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
@@ -181,6 +181,48 @@ EOF
     <true/>
     <key>LSMinimumSystemVersion</key>
     <string>12.0</string>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Camera RAW Image</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.camera-raw-image</string>
+                <string>com.adobe.raw-image</string>
+            </array>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>arw</string>
+                <string>cr2</string>
+                <string>cr3</string>
+                <string>crw</string>
+                <string>dng</string>
+                <string>nef</string>
+                <string>nrw</string>
+                <string>orf</string>
+                <string>raf</string>
+                <string>rw2</string>
+                <string>pef</string>
+                <string>srw</string>
+                <string>srf</string>
+                <string>sr2</string>
+                <string>3fr</string>
+                <string>erf</string>
+                <string>kdc</string>
+                <string>dcs</string>
+                <string>dcr</string>
+                <string>iiq</string>
+                <string>mos</string>
+                <string>mef</string>
+                <string>mrw</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>
 EOF
@@ -188,6 +230,15 @@ EOF
     # Copy Icons
     cp "$REPO_ROOT/Fujify/Assets/images/logo.ico" "$APP_DIR/Contents/Resources/logo.ico"
     cp "$REPO_ROOT/Fujify/Assets/images/logos.png" "$APP_DIR/Contents/Resources/logo.png"
+
+    # Copy Quick Actions
+    if [ -d "$REPO_ROOT/Fujify/Assets/QuickActions" ]; then
+        mkdir -p "$APP_DIR/Contents/Resources/QuickActions"
+        cp -R "$REPO_ROOT/Fujify/Assets/QuickActions/"* "$APP_DIR/Contents/Resources/QuickActions/"
+    elif [ -d "$REPO_ROOT/build_assets/mac/QuickActions" ]; then
+        mkdir -p "$APP_DIR/Contents/Resources/QuickActions"
+        cp -R "$REPO_ROOT/build_assets/mac/QuickActions/"* "$APP_DIR/Contents/Resources/QuickActions/"
+    fi
 
     # Set execute bits on main executable, dylibs, and helper scripts
     chmod +x "$APP_DIR/Contents/MacOS/Fujifier" || true
@@ -201,7 +252,7 @@ EOF
     codesign --force --deep -s - "$APP_DIR" || true
 
     # Create Zip
-    local ZIP_PATH="$RELEASE_DIR/Fujifier-v2.3.0-macOS-$ARCH_NAME.zip"
+    local ZIP_PATH="$RELEASE_DIR/Fujifier-v2.2.0-macOS-$ARCH_NAME.zip"
     rm -f "$ZIP_PATH"
     (cd "$DIST_DIR" && zip -r -y "$ZIP_PATH" "$APP_NAME.app")
     echo "Created Archive: $ZIP_PATH"

@@ -45,7 +45,11 @@ namespace Fujify.Services
             string subfolderName;
             if (subfolderUseOriginalName)
             {
-                string originalDirName = Path.GetFileName(sourceDir);
+                string originalDirName = Path.GetFileName(sourceDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                if (string.IsNullOrWhiteSpace(originalDirName) && !string.IsNullOrWhiteSpace(customOutputFolder))
+                {
+                    originalDirName = Path.GetFileName(baseDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                }
                 if (string.IsNullOrWhiteSpace(originalDirName))
                 {
                     originalDirName = "Photos";

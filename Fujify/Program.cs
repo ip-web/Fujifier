@@ -15,6 +15,36 @@ sealed class Program
     {
         var parsed = CommandLineArgs.Parse(args);
 
+        if (parsed.UnregisterContextMenu)
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                WindowsContextMenuService.UnregisterContextMenu();
+                WindowsContextMenuService.UnregisterOpenWith();
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                MacQuickActionService.UnregisterQuickActions();
+            }
+            Environment.Exit(0);
+            return;
+        }
+
+        if (parsed.RegisterContextMenu)
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                WindowsContextMenuService.RegisterContextMenu();
+                WindowsContextMenuService.RegisterOpenWith();
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                MacQuickActionService.RegisterQuickActions();
+            }
+            Environment.Exit(0);
+            return;
+        }
+
         // Headless Linux detection: running on Linux with no DISPLAY or WAYLAND_DISPLAY
         bool isHeadlessLinux = OperatingSystem.IsLinux() &&
             string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DISPLAY")) &&

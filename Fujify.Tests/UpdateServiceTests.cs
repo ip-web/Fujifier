@@ -121,7 +121,7 @@ namespace Fujify.Tests
         public void ParseReleaseJson_DraftRelease_IsIgnoredAndReturnsNull()
         {
             string draftJson = @"{
-                ""tag_name"": ""v2.3.0"",
+                ""tag_name"": ""v2.2.0"",
                 ""draft"": true,
                 ""assets"": []
             }";

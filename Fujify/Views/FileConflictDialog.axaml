@@ -10,19 +10,13 @@
         WindowStartupLocation="CenterOwner"
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaTitleBarHeightHint="0"
-        WindowDecorations="None"
-        TransparencyLevelHint="Transparent"
-        Background="Transparent"
+        WindowDecorations="BorderOnly"
+        Background="{DynamicResource AppSurfaceBrush}"
         Icon="/Assets/images/logo.ico">
 
     <!-- Standalone Dialog Card Block -->
     <Border Classes="dialog-card"
-            Background="{DynamicResource AppSurfaceBrush}"
-            BorderBrush="{DynamicResource AppEdgeBrush}"
-            BorderThickness="1"
-            CornerRadius="16"
             Padding="22"
-            ClipToBounds="True"
             PointerPressed="Window_PointerPressed">
         <Grid RowDefinitions="Auto,*,Auto,Auto">
             <!-- Title and Icon -->

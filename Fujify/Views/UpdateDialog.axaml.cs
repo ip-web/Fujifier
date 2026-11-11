@@ -48,6 +48,7 @@ namespace Fujify.Views
         public UpdateDialog(UpdateInfo updateInfo, IUpdateService? updateService = null, ISettingsService? settingsService = null)
         {
             InitializeComponent();
+            NativeWindowHelper.ConfigureDialogWindow(this);
             _updateInfo = updateInfo;
             _settingsService = settingsService ?? new SettingsService();
             _updateService = updateService ?? new UpdateService(_settingsService);

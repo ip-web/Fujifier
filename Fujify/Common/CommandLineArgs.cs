@@ -91,7 +91,13 @@ namespace Fujify.Common
 
         public bool LosslessCompression { get; set; } = true;
 
+        public bool VerifyFileIntegrity { get; set; } = false;
+
         public bool Quiet { get; set; } = false;
+
+        public bool UnregisterContextMenu { get; set; }
+
+        public bool RegisterContextMenu { get; set; }
 
 
 
@@ -187,6 +193,28 @@ namespace Fujify.Common
 
                 }
 
+                else if (arg.Equals("--unregister-context-menu", StringComparison.OrdinalIgnoreCase) ||
+
+                         arg.Equals("--clean-context-menu", StringComparison.OrdinalIgnoreCase))
+
+                {
+
+                    result.UnregisterContextMenu = true;
+
+                    result.IsCliMode = true;
+
+                }
+
+                else if (arg.Equals("--register-context-menu", StringComparison.OrdinalIgnoreCase))
+
+                {
+
+                    result.RegisterContextMenu = true;
+
+                    result.IsCliMode = true;
+
+                }
+
                 else if (arg.Equals("--backup", StringComparison.OrdinalIgnoreCase))
 
                 {
@@ -224,6 +252,28 @@ namespace Fujify.Common
                 {
 
                     result.LosslessCompression = true;
+
+                }
+
+                else if (arg.Equals("--verify", StringComparison.OrdinalIgnoreCase) ||
+
+                         arg.Equals("--verify-integrity", StringComparison.OrdinalIgnoreCase) ||
+
+                         arg.Equals("--check-integrity", StringComparison.OrdinalIgnoreCase))
+
+                {
+
+                    result.VerifyFileIntegrity = true;
+
+                }
+
+                else if (arg.Equals("--no-verify", StringComparison.OrdinalIgnoreCase) ||
+
+                         arg.Equals("--no-verify-integrity", StringComparison.OrdinalIgnoreCase))
+
+                {
+
+                    result.VerifyFileIntegrity = false;
 
                 }
 

@@ -71,5 +71,16 @@ namespace Fujify.Tests
             }
             Assert.True(foundFullScreenStyle, "MainWindow should contain styles hiding PART_FullScreenButton");
         }
+
+        [Fact(Skip = "Visual inspection UI test; requires headless platform runner in Avalonia 12.")]
+        public void PreferencesWindow_UsesBorderOnlyDecorations()
+        {
+            try { Program.BuildAvaloniaApp().SetupWithoutStarting(); } catch { }
+            var win = new PreferencesWindow();
+            Assert.Equal(WindowDecorations.BorderOnly, win.WindowDecorations);
+            Assert.True(win.ExtendClientAreaToDecorationsHint);
+            Assert.Equal(0, win.ExtendClientAreaTitleBarHeightHint);
+            Assert.Contains("no-caption", win.Classes);
+        }
     }
 }

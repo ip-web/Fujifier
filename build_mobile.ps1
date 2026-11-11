@@ -131,7 +131,7 @@ if (-not $SkipAndroid) {
         }
     }
 
-    $globalVersionCode = 6
+    $globalVersionCode = 10
     $architectures = @(
         @{ Rid = "android-arm64"; Arch = "arm64" },
         @{ Rid = "android-x64"; Arch = "x64" }
@@ -152,8 +152,8 @@ if (-not $SkipAndroid) {
             }
 
             if ($signedApk) {
-                $targetRelease = Join-Path $releaseDir "Fujifier-v2.3.0-Android-$archSuffix.apk"
-                $targetDist = Join-Path $distDir "Fujifier-v2.3.0-Android-$archSuffix.apk"
+                $targetRelease = Join-Path $releaseDir "Fujifier-v2.2.0-Android-$archSuffix.apk"
+                $targetDist = Join-Path $distDir "Fujifier-v2.2.0-Android-$archSuffix.apk"
                 Copy-Item -Path $signedApk.FullName -Destination $targetRelease -Force
                 Copy-Item -Path $signedApk.FullName -Destination $targetDist -Force
                 $sizeMb = [math]::Round($signedApk.Length / 1MB, 2)
@@ -176,8 +176,8 @@ if (-not $SkipAndroid) {
             }
 
             if ($rawAab) {
-                $targetReleaseAab = Join-Path $releaseDir "Fujifier-v2.3.0-Android-$archSuffix.aab"
-                $targetDistAab = Join-Path $distDir "Fujifier-v2.3.0-Android-$archSuffix.aab"
+                $targetReleaseAab = Join-Path $releaseDir "Fujifier-v2.2.0-Android-$archSuffix.aab"
+                $targetDistAab = Join-Path $distDir "Fujifier-v2.2.0-Android-$archSuffix.aab"
                 Copy-Item -Path $rawAab.FullName -Destination $targetReleaseAab -Force
 
                 # Sign AAB with release upload key if available
@@ -201,9 +201,9 @@ if (-not $SkipAndroid) {
 
     # 2c. Assemble Universal Multi-Architecture AAB (both ARM64 & x86_64 in one bundle, versionCode 3)
     Write-Host "`nAssembling Universal Multi-Architecture Android App Bundle (AAB) with both ARM64 and x64 (versionCode $globalVersionCode)..." -ForegroundColor Cyan
-    $arm64AabPath = Join-Path $releaseDir "Fujifier-v2.3.0-Android-arm64.aab"
-    $x64AabPath = Join-Path $releaseDir "Fujifier-v2.3.0-Android-x64.aab"
-    $universalAabPath = Join-Path $releaseDir "Fujifier-v2.3.0-Android.aab"
+    $arm64AabPath = Join-Path $releaseDir "Fujifier-v2.2.0-Android-arm64.aab"
+    $x64AabPath = Join-Path $releaseDir "Fujifier-v2.2.0-Android-x64.aab"
+    $universalAabPath = Join-Path $releaseDir "Fujifier-v2.2.0-Android.aab"
     $bundletoolJar = "C:\Program Files\dotnet\packs\Microsoft.Android.Sdk.Windows\36.1.2\tools\bundletool.jar"
     if (-not (Test-Path $bundletoolJar)) {
         $bundletoolJar = (Get-ChildItem -Path "C:\Program Files\dotnet\packs" -Filter "bundletool*.jar" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
@@ -259,7 +259,7 @@ if (-not $SkipAndroid) {
         }
 
         # 6. Copy to dist
-        Copy-Item -Path $universalAabPath -Destination (Join-Path $distDir "Fujifier-v2.3.0-Android.aab") -Force
+        Copy-Item -Path $universalAabPath -Destination (Join-Path $distDir "Fujifier-v2.2.0-Android.aab") -Force
         $uniSizeMb = [math]::Round((Get-Item $universalAabPath).Length / 1MB, 2)
         Write-Host "Universal Multi-Architecture AAB generated: $universalAabPath ($uniSizeMb MB)" -ForegroundColor Green
 
@@ -306,7 +306,7 @@ if (-not $SkipiOS) {
             Write-Warning "Native Mach-O executable 'Fujify.iOS' is not present in the app bundle. Windows builds MSIL assemblies only and requires a Mac build host (or GitHub Actions macos runner) to produce an installable iOS IPA."
         }
 
-        $targetIpa = Join-Path $releaseDir "Fujifier-v2.3.0-iOS.ipa"
+        $targetIpa = Join-Path $releaseDir "Fujifier-v2.2.0-iOS.ipa"
         if (Test-Path $targetIpa) { Remove-Item -Force $targetIpa }
 
         Add-Type -AssemblyName System.IO.Compression.FileSystem

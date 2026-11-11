@@ -282,7 +282,8 @@ namespace Fujify.Services
                 catch { }
             }
 
-            bool useOutputPath = !string.IsNullOrEmpty(outputFolder) || !string.IsNullOrEmpty(customOutputFilePath);
+            bool useOutputPath = (!string.IsNullOrEmpty(outputFolder) || !string.IsNullOrEmpty(customOutputFilePath))
+                && !string.Equals(dngFilePath, customOutputFilePath, StringComparison.OrdinalIgnoreCase);
             string targetFilePath;
 
             if (useOutputPath)
@@ -434,8 +435,8 @@ namespace Fujify.Services
                 return new MetadataResult(false, $"Failed to inject metadata: {ex.Message}");
             }
 
-            // 8. Copy sidecar .xmp alongside output .dng if output path was used
-            if (!string.IsNullOrEmpty(sidecarPath) && File.Exists(sidecarPath) && useOutputPath)
+            // 8. Copy sidecar .xmp alongside output .dng if sidecar exists
+            if (!string.IsNullOrEmpty(sidecarPath) && File.Exists(sidecarPath))
             {
                 try
                 {
