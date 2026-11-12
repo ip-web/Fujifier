@@ -176,7 +176,7 @@ EOF
     <key>CFBundleExecutable</key>
     <string>Fujifier</string>
     <key>CFBundleIconFile</key>
-    <string>logo.ico</string>
+    <string>logo.icns</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>LSMinimumSystemVersion</key>
@@ -228,8 +228,10 @@ EOF
 EOF
 
     # Copy Icons
+    cp "$REPO_ROOT/Fujify/Assets/images/logo.icns" "$APP_DIR/Contents/Resources/logo.icns"
     cp "$REPO_ROOT/Fujify/Assets/images/logo.ico" "$APP_DIR/Contents/Resources/logo.ico"
-    cp "$REPO_ROOT/Fujify/Assets/images/logos.png" "$APP_DIR/Contents/Resources/logo.png"
+    cp "$REPO_ROOT/Fujify/Assets/images/logoXL.png" "$APP_DIR/Contents/Resources/logo.png"
+    cp "$REPO_ROOT/Fujify/Assets/images/logos.png" "$APP_DIR/Contents/Resources/logos.png"
 
     # Copy Quick Actions
     if [ -d "$REPO_ROOT/Fujify/Assets/QuickActions" ]; then

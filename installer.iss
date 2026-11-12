@@ -51,6 +51,7 @@ Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "contextmenu"; Description: "Register right-click context menu for RAW files (requires Pro license)"; GroupDescription: "Context Menu Integration:"; Flags: unchecked
 
 [Files]
 Source: "{#MyAppSourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -96,11 +97,30 @@ Root: HKA; Subkey: "Software\Classes\Fujifier.RAW"; ValueType: string; ValueName
 Root: HKA; Subkey: "Software\Classes\Fujifier.RAW\DefaultIcon"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"",0"; Flags: uninsdeletekey
 Root: HKA; Subkey: "Software\Classes\Fujifier.RAW\shell\open\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Flags: uninsdeletekey
 
+; ── Context menu: logon auto-restore ─────────────────────────────────────────
+; Windows can silently drop HKCU\Software\Classes\SystemFileAssociations shell
+; verb keys after the machine wakes from deep sleep / hibernation.  To recover
+; without user intervention we write a lightweight logon entry that re-runs
+; --register-context-menu every time the user signs in.  The entry is only
+; written when the user opted into the "contextmenu" installer task; it is
+; removed automatically on uninstall (uninsdeletevalue flag).
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
+  ValueType: string; ValueName: "FujifierContextMenu"; \
+  ValueData: """{app}\{#MyAppExeName}"" --register-context-menu"; \
+  Flags: uninsdeletevalue; Tasks: contextmenu
+
 [Run]
+; Register context menu immediately after install if the task was selected
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-context-menu"; Flags: runhidden runasoriginaluser; Tasks: contextmenu
+; Launch the app after install (optional, user-visible checkbox)
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [UninstallRun]
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--unregister-context-menu"; Flags: runhidden; RunOnceId: "UnregContextMenu"
+
+[UninstallDelete]
+; Belt-and-suspenders: also remove the logon auto-restore Run entry on uninstall
+; (--unregister-context-menu above already removes it at runtime; this covers edge cases)
 
 [Code]
 procedure CleanRegistryKeysForRoot(RootKey: Integer; SubPrefix: String);

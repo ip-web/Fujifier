@@ -54,7 +54,7 @@ $infoPlist = @"
     <key>CFBundleExecutable</key>
     <string>Fujifier</string>
     <key>CFBundleIconFile</key>
-    <string>logo.ico</string>
+    <string>logo.icns</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>LSMinimumSystemVersion</key>
@@ -145,8 +145,12 @@ if ($macDngLab) {
 [IO.File]::WriteAllText((Join-Path $macOsDir "exiftool"), $exifToolScript.Replace("`r`n", "`n"))
 
 [IO.File]::WriteAllText((Join-Path $contentsDir "Info.plist"), $infoPlist.Replace("`r`n", "`n"))
+if (Test-Path "$repoRoot\Fujify\Assets\images\logo.icns") {
+    Copy-Item -Path "$repoRoot\Fujify\Assets\images\logo.icns" -Destination (Join-Path $resourcesDir "logo.icns") -Force
+}
 Copy-Item -Path "$repoRoot\Fujify\Assets\images\logo.ico" -Destination (Join-Path $resourcesDir "logo.ico") -Force
-Copy-Item -Path "$repoRoot\Fujify\Assets\images\logos.png" -Destination (Join-Path $resourcesDir "logo.png") -Force
+Copy-Item -Path "$repoRoot\Fujify\Assets\images\logoXL.png" -Destination (Join-Path $resourcesDir "logo.png") -Force
+Copy-Item -Path "$repoRoot\Fujify\Assets\images\logos.png" -Destination (Join-Path $resourcesDir "logos.png") -Force
 
 # Copy Quick Actions
 $repoQuickActions = if (Test-Path "$repoRoot\Fujify\Assets\QuickActions") { "$repoRoot\Fujify\Assets\QuickActions" } elseif (Test-Path "$repoRoot\build_assets\mac\QuickActions") { "$repoRoot\build_assets\mac\QuickActions" } else { $null }
@@ -230,8 +234,12 @@ exit 127
 [IO.File]::WriteAllText((Join-Path $intelMacOsDir "exiftool"), $exifToolScript.Replace("`r`n", "`n"))
 
 [IO.File]::WriteAllText((Join-Path $intelContentsDir "Info.plist"), $infoPlist.Replace("`r`n", "`n"))
+if (Test-Path "$repoRoot\Fujify\Assets\images\logo.icns") {
+    Copy-Item -Path "$repoRoot\Fujify\Assets\images\logo.icns" -Destination (Join-Path $intelResourcesDir "logo.icns") -Force
+}
 Copy-Item -Path "$repoRoot\Fujify\Assets\images\logo.ico" -Destination (Join-Path $intelResourcesDir "logo.ico") -Force
-Copy-Item -Path "$repoRoot\Fujify\Assets\images\logos.png" -Destination (Join-Path $intelResourcesDir "logo.png") -Force
+Copy-Item -Path "$repoRoot\Fujify\Assets\images\logoXL.png" -Destination (Join-Path $intelResourcesDir "logo.png") -Force
+Copy-Item -Path "$repoRoot\Fujify\Assets\images\logos.png" -Destination (Join-Path $intelResourcesDir "logos.png") -Force
 
 # Copy Quick Actions
 if ($repoQuickActions) {

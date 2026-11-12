@@ -290,6 +290,39 @@ namespace Fujify.Services
             return string.Join(" OR ", parts);
         }
 
+        private const string LogonRunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        private const string LogonRunValueName = "FujifierContextMenu";
+
+        /// <summary>
+        /// Writes (or removes) the HKCU Run entry that re-registers the context
+        /// menu on every user logon.  This ensures the shell verb keys survive
+        /// Windows deep-sleep / hibernation cycles, where the OS can silently
+        /// discard HKCU\Software\Classes\SystemFileAssociations shell sub-keys.
+        /// </summary>
+        [SupportedOSPlatform("windows")]
+        private static void SetLogonAutoRestore(bool enable)
+        {
+            try
+            {
+                using var runKey = Registry.CurrentUser.OpenSubKey(LogonRunKeyPath, writable: true);
+                if (runKey == null) return;
+
+                if (enable)
+                {
+                    string exePath = GetExecutablePath();
+                    runKey.SetValue(LogonRunValueName, $"\"{exePath}\" --register-context-menu");
+                }
+                else
+                {
+                    runKey.DeleteValue(LogonRunValueName, throwOnMissingValue: false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[WindowsContextMenuService] SetLogonAutoRestore({enable}): {ex.Message}");
+            }
+        }
+
         public static bool RegisterContextMenu()
         {
             if (!OperatingSystem.IsWindows()) return false;
@@ -322,6 +355,9 @@ namespace Fujify.Services
                 // 3. Ensure Explorer does not truncate context menu when selecting >15 files
                 EnsureMultipleInvokePromptMinimum();
 
+                // 4. Write logon auto-restore entry so Windows sleep/hibernate does not permanently drop our shell keys
+                SetLogonAutoRestore(true);
+
                 NotifyShell();
                 return true;
             }
@@ -351,6 +387,9 @@ namespace Fujify.Services
                     UnregisterExtensionVerb(@"Software\Classes\SystemFileAssociations\" + ext);
                     UnregisterExtensionVerb(@"Software\Classes\" + ext);
                 }
+
+                // Remove logon auto-restore entry
+                SetLogonAutoRestore(false);
 
                 // If running elevated (e.g. uninstaller), also clean up HKLM
                 try
