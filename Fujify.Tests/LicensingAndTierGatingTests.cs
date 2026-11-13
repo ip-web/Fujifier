@@ -222,7 +222,7 @@ namespace Fujify.Tests
             Assert.False(vm.LosslessCompression);
             Assert.Equal(1, vm.MaxConcurrentConversions);
 
-            int expectedThreads = Math.Max(1, Environment.ProcessorCount / 2);
+            int expectedThreads = vm.DefaultConcurrency;
 
             // Activate Pro license
             var result = await licenseService.ActivateLicenseKeyAsync("FUJIFIER-PRO-DEV-OVERRIDE");

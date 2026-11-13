@@ -103,7 +103,7 @@ namespace Fujify.ViewModels
         }
 
         public int TotalThreads => Environment.ProcessorCount;
-        public int DefaultConcurrency => Math.Max(1, TotalThreads / 2);
+        public int DefaultConcurrency => Common.DrivePerformanceHelper.GetOptimalConversionConcurrency(null, 0, true);
 
         public bool IsPro => _licenseService.IsPro;
 
@@ -804,14 +804,14 @@ namespace Fujify.ViewModels
             get
             {
                 if (!_licenseService.IsPro)
-                    return "1 thread (Free tier: sequential conversion. Upgrade to Pro for multi-threaded conversions)";
+                    return "1 file (Free tier: sequential conversion. Upgrade to Pro for multi-file parallel processing)";
+                if (_maxConcurrentConversions == 1)
+                    return "1 file (Sequential conversion - lowest memory footprint and thermal load)";
                 if (_maxConcurrentConversions == DefaultConcurrency)
-                    return $"Default: {_maxConcurrentConversions} (Recommended for P-core / E-core balance)";
-                if (_maxConcurrentConversions == TotalThreads)
-                    return $"Maximum: {_maxConcurrentConversions} (Full saturation - may cause disk I/O bottleneck)";
-                if (_maxConcurrentConversions <= 8)
-                    return $"{_maxConcurrentConversions} threads (Low CPU load, runs primarily on P-cores)";
-                return $"{_maxConcurrentConversions} threads (Utilizes P-cores and E-cores)";
+                    return $"Default: {_maxConcurrentConversions} files (Recommended: optimal cache throughput & sustained boost clocks)";
+                if (_maxConcurrentConversions <= 4)
+                    return $"{_maxConcurrentConversions} files in parallel (High throughput; each file utilizes multi-core CPU)";
+                return $"{_maxConcurrentConversions} files in parallel (High concurrency: may increase memory bandwidth pressure or thermal throttling)";
             }
         }
 

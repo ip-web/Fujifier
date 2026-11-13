@@ -909,11 +909,12 @@ namespace Fujify.ViewModels
                         string targetDngForConversion = finalDestFilePath;
 
                         bool useLossless = _licenseService.IsPro && _settingsService.Settings.LosslessCompression;
-                        var convResult = await Task.Run(() => _rawConverterService.ConvertToDng(
+                        ct.ThrowIfCancellationRequested();
+                        var convResult = _rawConverterService.ConvertToDng(
                             filePath,
                             embedOriginalRaw,
                             targetDngForConversion,
-                            useLossless), ct);
+                            useLossless);
 
                         if (!convResult.Success || string.IsNullOrEmpty(convResult.OutputDngPath))
                         {
@@ -936,14 +937,15 @@ namespace Fujify.ViewModels
                         }
                     }
 
-                    var metaResult = await Task.Run(() => _metadataService.InjectFujifilmMetadata(
+                    ct.ThrowIfCancellationRequested();
+                    var metaResult = _metadataService.InjectFujifilmMetadata(
                         dngFilePath,
                         outputFolder,
                         createBackup: false,
                         isOriginallyDng: isOriginallyDng,
                         customOutputFilePath: customOutputPath,
                         targetUniqueCameraModel: "Fujifilm X-T5",
-                        sourceRawFilePath: filePath), ct);
+                        sourceRawFilePath: filePath);
 
                     if (!metaResult.Success)
                     {

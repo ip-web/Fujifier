@@ -1358,7 +1358,7 @@ namespace Fujify.Services
                 _settingsService.Settings.OfflineTokenExpires = offlineExpiry.Value;
             }
             _settingsService.Settings.LosslessCompression = true;
-            _settingsService.Settings.MaxConcurrentConversions = Math.Max(1, Environment.ProcessorCount / 2);
+            _settingsService.Settings.MaxConcurrentConversions = Common.DrivePerformanceHelper.GetOptimalConversionConcurrency(null, 0, true);
             _settingsService.Save();
         }
 

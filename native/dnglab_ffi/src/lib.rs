@@ -11,6 +11,9 @@ use std::sync::Once;
 use rawler::dng::convert::{ConvertParams, convert_raw_file};
 use rawler::decoders::supported_extensions;
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 static INIT_HOOK: Once = Once::new();
 
 fn ensure_panic_hook_installed() {

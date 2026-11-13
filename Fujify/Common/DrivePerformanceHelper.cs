@@ -147,11 +147,16 @@ namespace Fujify.Common
 
             if (IsRemovableOrSlowDrive(sampleFilePath))
             {
-                // Throttled to 2 threads for SD card / HDD to sustain linear sequential write/read speeds
+                // Throttled to 2 concurrent files for SD card / HDD to sustain linear sequential write/read speeds
                 return Math.Clamp(Environment.ProcessorCount / 4, 1, 2);
             }
 
-            return Math.Max(1, Environment.ProcessorCount / 2);
+            // For high-speed solid-state drives:
+            // Since each RAW conversion internally engages multi-core acceleration (via Rayon parallel
+            // tile compression in dnglab_ffi), running too many concurrent 100MB+ images causes L3 cache
+            // line thrashing and memory bus contention.
+            // Optimal batch throughput is sustained with 2 to 3 concurrent files (at most 4 on high core-count CPUs).
+            return Math.Clamp(Environment.ProcessorCount / 8, 2, 4);
         }
 
         /// <summary>

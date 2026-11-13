@@ -18,6 +18,7 @@
  */
 
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -45,7 +46,31 @@ namespace Fujify.Services
 
         static DngLabNative()
         {
+            EnsureRayonThreadsConfigured();
             NativeLibraryResolver.EnsureRegistered();
+        }
+
+        /// <summary>
+        /// Tunes Rayon's internal thread pool before dnglab_ffi initializes it.
+        /// On hybrid architectures (e.g. Intel 12th/13th/14th Gen P-cores + E-cores),
+        /// restricts Rayon worker threads to the Performance (P) cores to avoid E-core
+        /// straggler bottlenecks and thermal throttling during parallel tile compression.
+        /// </summary>
+        private static void EnsureRayonThreadsConfigured()
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RAYON_NUM_THREADS")))
+                {
+                    int pThreads = Common.CpuTopologyHelper.PerformanceThreadCount;
+                    if (pThreads > 0 && pThreads < Environment.ProcessorCount)
+                    {
+                        Environment.SetEnvironmentVariable("RAYON_NUM_THREADS", pThreads.ToString());
+                        Debug.WriteLine($"[DngLabNative] Configured RAYON_NUM_THREADS={pThreads} for P-core optimization (total CPU threads: {Environment.ProcessorCount}).");
+                    }
+                }
+            }
+            catch { }
         }
 
         private static IntPtr DllImportResolver(string libraryName, System.Reflection.Assembly assembly, DllImportSearchPath? searchPath)
