@@ -11,4 +11,6 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 rawler = { git = "https://github.com/dnglab/dnglab.git", default-features = true }
+
+[target.'cfg(not(target_os = "ios"))'.dependencies]
 mimalloc = { version = "0.1", default-features = false }

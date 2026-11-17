@@ -11,6 +11,7 @@ use std::sync::Once;
 use rawler::dng::convert::{ConvertParams, convert_raw_file};
 use rawler::decoders::supported_extensions;
 
+#[cfg(not(target_os = "ios"))]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 

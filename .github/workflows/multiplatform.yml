@@ -213,7 +213,7 @@ jobs:
 
           echo "=== Building native dnglab_ffi for iOS ==="
           cd native/dnglab_ffi
-          cargo build --release --target aarch64-apple-ios
+          cargo build --lib --release --target aarch64-apple-ios
           cd ../..
 
           echo "=== Building native raw2raf_ffi for iOS ==="
@@ -232,7 +232,7 @@ jobs:
             fi
           fi
           cd tools/Raw2Raf
-          cargo build --release --target aarch64-apple-ios
+          cargo build --lib --release --target aarch64-apple-ios
           cd ../..
 
           mkdir -p Fujify.iOS/Frameworks
