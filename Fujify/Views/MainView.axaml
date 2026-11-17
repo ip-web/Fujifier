@@ -2982,6 +2982,67 @@
                                 Height="38" CornerRadius="19" Padding="24,0" HorizontalAlignment="Center"/>
                     </StackPanel>
 
+                    <!-- Update Available In-App Modal -->
+                    <StackPanel Spacing="14" IsVisible="{Binding IsUpdateAvailableModal}">
+                        <!-- Header: Icon & Version Badge -->
+                        <StackPanel Spacing="8" HorizontalAlignment="Center">
+                            <Border Width="48" Height="48" CornerRadius="24" Background="{Binding ModalBadgeBackground}" HorizontalAlignment="Center">
+                                <TextBlock Text="{Binding ModalIcon}" FontSize="24" Foreground="{Binding ModalIconColor}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="{Binding ModalTitle}" FontSize="17" FontWeight="Bold"
+                                       Foreground="{DynamicResource AppTextPrimaryBrush}" HorizontalAlignment="Center" TextAlignment="Center"/>
+                            <Border Background="#1A3498DB" CornerRadius="10" Padding="10,3" HorizontalAlignment="Center"
+                                    IsVisible="{Binding HasUpdateVersion}">
+                                <TextBlock Text="{Binding UpdateVersionText}" FontSize="12" FontWeight="SemiBold"
+                                           Foreground="#3498DB" HorizontalAlignment="Center"/>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Description Message -->
+                        <TextBlock Text="{Binding ModalMessage}" FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}"
+                                   TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" LineHeight="17"/>
+
+                        <!-- Action Buttons: Google Play & GitHub -->
+                        <Grid ColumnDefinitions="*,*" Margin="0,4,0,0">
+                            <!-- Google Play Button -->
+                            <Button Grid.Column="0" Command="{Binding OpenPlayStoreCommand}"
+                                    Classes="primary" Height="40" MinHeight="40" CornerRadius="20" Margin="0,0,5,0" Padding="8,0"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                                <StackPanel Orientation="Horizontal" Spacing="7" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Viewbox Width="14" Height="14" VerticalAlignment="Center">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Fill="#4285F4" Data="M1.3 1.1C1.1 1.4 1 1.8 1 2.3v19.4c0 .5.1.9.3 1.2l.1.1 10.9-10.9v-.2L1.4 1z"/>
+                                            <Path Fill="#EA4335" Data="M15.9 15.6l-3.6-3.6v-.2l3.6-3.6.1.1 4.3 2.4c1.2.7 1.2 1.8 0 2.5l-4.4 2.4z"/>
+                                            <Path Fill="#34A853" Data="M12.3 11.9L1.4 22.8c.4.4 1.1.5 1.8.1l12.7-7.2-3.6-3.8z"/>
+                                            <Path Fill="#FBBC05" Data="M12.3 12.1l3.6-3.8-12.7-7.2c-.7-.4-1.4-.3-1.8.1l10.9 10.9z"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Text="Google Play" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+
+                            <!-- GitHub Button -->
+                            <Button Grid.Column="1" Command="{Binding OpenGitHubReleaseCommand}"
+                                    Classes="secondary" Height="40" MinHeight="40" CornerRadius="20" Margin="5,0,0,0" Padding="8,0"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" VerticalContentAlignment="Center">
+                                <StackPanel Orientation="Horizontal" Spacing="7" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Viewbox Width="14" Height="14" VerticalAlignment="Center">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Fill="{DynamicResource AppTextPrimaryBrush}" Data="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Text="GitHub" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+
+                        <!-- Dismiss / Later Button -->
+                        <Button Content="{loc:Loc Later}" Command="{Binding CloseModalCommand}" Classes="secondary"
+                                Height="36" CornerRadius="18" HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+                    </StackPanel>
+
                     <!-- File Conflict In-App Modal -->
                     <StackPanel Spacing="14" IsVisible="{Binding IsConflictModal}">
                         <!-- Title and Icon -->

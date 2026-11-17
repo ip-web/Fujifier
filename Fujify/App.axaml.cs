@@ -550,12 +550,10 @@ public partial class App : Application
                     System.Environment.Exit(0);
                 };
             }
-            else if (!licenseService.IsPro)
+            System.Threading.Tasks.Task? desktopDelayTask = null;
+            if (!licenseService.IsPro)
             {
-                Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
-                {
-                    await Views.FreeTierDelayDialog.ShowDelayDialogAsync(mainWindow, licenseService, isPostConversion: false);
-                });
+                desktopDelayTask = Views.FreeTierDelayDialog.ShowDelayDialogAsync(mainWindow, licenseService, isPostConversion: false);
             }
 
             // Automatic update check on startup (if enabled)
@@ -565,7 +563,16 @@ public partial class App : Application
                 {
                     try
                     {
-                        await System.Threading.Tasks.Task.Delay(2500);
+                        if (desktopDelayTask != null)
+                        {
+                            await desktopDelayTask;
+                            await System.Threading.Tasks.Task.Delay(500);
+                        }
+                        else
+                        {
+                            await System.Threading.Tasks.Task.Delay(2500);
+                        }
+
                         var updateService = new Services.UpdateService(settingsService);
                         var result = await updateService.CheckForUpdateAsync(force: false);
                         if (result.IsUpdateAvailable && result.UpdateInfo != null)
@@ -594,13 +601,11 @@ public partial class App : Application
             singleView.MainView = mainView;
 
             // Free Tier Launch Delay Modal for mobile
+            System.Threading.Tasks.Task? freeTierDelayTask = null;
             if (!licenseService.IsPro)
             {
                 vm.ShowSplashAd();
-                Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
-                {
-                    await Views.FreeTierDelayDialog.ShowDelayDialogAsync(null, licenseService, isPostConversion: false);
-                });
+                freeTierDelayTask = Views.FreeTierDelayDialog.ShowDelayDialogAsync(null, licenseService, isPostConversion: false);
             }
 
             // Automatic update check on startup (if enabled)
@@ -610,7 +615,16 @@ public partial class App : Application
                 {
                     try
                     {
-                        await System.Threading.Tasks.Task.Delay(3000);
+                        if (freeTierDelayTask != null)
+                        {
+                            await freeTierDelayTask;
+                            await System.Threading.Tasks.Task.Delay(500);
+                        }
+                        else
+                        {
+                            await System.Threading.Tasks.Task.Delay(3000);
+                        }
+
                         var updateService = new Services.UpdateService(settingsService);
                         var result = await updateService.CheckForUpdateAsync(force: false);
                         if (result.IsUpdateAvailable && result.UpdateInfo != null)

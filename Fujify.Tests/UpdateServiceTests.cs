@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 using Fujify.Common;
 using Fujify.Models;
 using Fujify.Services;
+using Fujify.ViewModels;
 using Xunit;
 
 namespace Fujify.Tests
@@ -329,6 +332,140 @@ namespace Fujify.Tests
             Assert.False(settings.Settings.CheckForUpdatesOnStartup);
             Assert.Equal("2.2.0", settings.Settings.SkippedVersion);
             Assert.Equal(now, settings.Settings.LastUpdateCheck);
+        }
+
+        [Fact]
+        public async Task ShowUpdateAvailableModalAsync_PopulatesModalPropertiesAndLinks()
+        {
+            var vm = new MainViewModel();
+            var updateInfo = new UpdateInfo
+            {
+                TagName = "v2.2.0",
+                Version = new Version(2, 2, 0),
+                Title = "Initial Release 2.2.0",
+                ReleaseUrl = "https://github.com/ip-web/Fujifier/releases/tag/v2.2.0"
+            };
+
+            string openedUrl = string.Empty;
+            MainViewModel.PlatformOpenUrlCallback = url => openedUrl = url;
+
+            try
+            {
+                await vm.ShowUpdateAvailableModalAsync(updateInfo);
+
+                Assert.True(vm.IsModalOpen);
+                Assert.Equal("UpdateAvailable", vm.ModalType);
+                Assert.True(vm.IsUpdateAvailableModal);
+                Assert.True(vm.IsBottomSheetOpen);
+                Assert.Equal("v2.2.0", vm.UpdateVersionText);
+                Assert.True(vm.HasUpdateVersion);
+                Assert.Contains("2.2.0", vm.ModalMessage);
+                Assert.Equal("https://play.google.com/store/apps/details?id=com.ipweb.fujifier", vm.UpdateGooglePlayUrl);
+                Assert.Equal("https://github.com/ip-web/Fujifier/releases/tag/v2.2.0", vm.UpdateGitHubUrl);
+
+                vm.OpenPlayStoreCommand.Execute(null);
+                Assert.Equal("https://play.google.com/store/apps/details?id=com.ipweb.fujifier", openedUrl);
+
+                vm.OpenGitHubReleaseCommand.Execute(null);
+                Assert.Equal("https://github.com/ip-web/Fujifier/releases/tag/v2.2.0", openedUrl);
+
+                vm.CloseModal();
+                Assert.False(vm.IsModalOpen);
+                Assert.Equal("None", vm.ModalType);
+                Assert.False(vm.IsUpdateAvailableModal);
+            }
+            finally
+            {
+                MainViewModel.PlatformOpenUrlCallback = null;
+            }
+        }
+
+        [Fact]
+        public async Task ShowUpdateAvailableModalAsync_WaitsForActiveFreeTierModalToFinish()
+        {
+            var mockLicense = new MockLicenseService { IsPro = false, DelaySeconds = 15 };
+            var vm = new MainViewModel(licenseService: mockLicense);
+
+            var updateInfo = new UpdateInfo
+            {
+                TagName = "v2.2.0",
+                Version = new Version(2, 2, 0),
+                Title = "v2.2.0",
+                ReleaseUrl = "https://github.com/ip-web/Fujifier/releases/tag/v2.2.0"
+            };
+
+            // Start free tier delay modal
+            var freeTierTask = vm.ShowFreeTierDelayModalAsync(mockLicense);
+            Assert.True(vm.IsFreeTierDelayModal);
+            Assert.Equal("FreeTierDelay", vm.ModalType);
+
+            // Trigger update available check in background while free tier is active
+            var updateTask = Task.Run(async () =>
+            {
+                await vm.ShowUpdateAvailableModalAsync(updateInfo);
+            });
+
+            // While delay is active, ModalType should NOT be immediately overwritten to UpdateAvailable
+            await Task.Delay(100);
+            Assert.Equal("FreeTierDelay", vm.ModalType);
+            Assert.True(vm.IsFreeTierDelayModal);
+
+            // Simulate timer completing countdown
+            vm.DelayRemainingSeconds = 0;
+            vm.CanDismissModal = true;
+
+            // Complete the modal by clicking continue
+            vm.CloseModal();
+            await freeTierTask;
+
+            // Now updateTask will complete and present the Update Available modal
+            await updateTask;
+
+            Assert.Equal("UpdateAvailable", vm.ModalType);
+            Assert.True(vm.IsUpdateAvailableModal);
+            Assert.True(vm.IsModalOpen);
+
+            vm.CloseModal();
+        }
+
+        private class MockLicenseService : ILicenseService
+        {
+            public bool IsPro { get; set; } = false;
+            public LicenseStatus CurrentStatus => new() { Tier = IsPro ? LicenseTier.Pro : LicenseTier.Free };
+            public int MaxFreeQueueSize => 10;
+            public int DelaySeconds { get; set; } = 15;
+            public string? AccountEmail => null;
+            public bool IsAccountLoggedIn => false;
+            public string? AccountLicenseKey => null;
+            public bool HasAccountLicense => false;
+            public string AccountDashboardUrl => "https://fujifier.cc/account";
+            public int UsedActivations => 0;
+            public int MaxActivations => 3;
+            public string SlotInfoText => "0 of 3 devices";
+            public IReadOnlyList<Fujify.Models.LicenseDeviceDto> RegisteredDevices => Array.Empty<Fujify.Models.LicenseDeviceDto>();
+            public string CurrentDeviceId => "mock-device-id";
+
+#pragma warning disable CS0067
+            public event EventHandler<LicenseStatus>? LicenseChanged;
+            public event EventHandler? DevicesChanged;
+#pragma warning restore CS0067
+
+            public void Initialize() { }
+            public void SyncFromSettings() { }
+            public Task<LicenseActivationResult> ActivateLicenseKeyAsync(string licenseKey) => Task.FromResult(new LicenseActivationResult(true));
+            public Task<LicenseActivationResult> ActivateCurrentDeviceAsync() => Task.FromResult(new LicenseActivationResult(true));
+            public Task<LicenseActivationResult> LoginWithAccountAsync(string email, string password) => Task.FromResult(new LicenseActivationResult(true));
+            public Task<(bool Success, string Message)> RequestPasswordResetAsync(string email) => Task.FromResult((true, "Reset link sent"));
+            public Task<LicenseActivationResult> LoginWithGoogleOAuthAsync(Action<string>? statusCallback = null, CancellationToken cancellationToken = default) => Task.FromResult(new LicenseActivationResult(true));
+            public Task<LicenseActivationResult> LoginWithGoogleIdTokenAsync(string googleIdToken) => Task.FromResult(new LicenseActivationResult(true));
+            public Task<LicenseActivationResult> RetrieveLicenseFromAccountAsync() => Task.FromResult(new LicenseActivationResult(true));
+            public Task<LicenseActivationResult> CompleteOAuthCallbackAsync(string code, string? codeVerifier = null, string? state = null) => Task.FromResult(new LicenseActivationResult(true));
+            public Task<bool> DeactivateLicenseAsync() => Task.FromResult(true);
+            public Task<bool> DeactivateRemoteDeviceAsync(string deviceId) => Task.FromResult(true);
+            public Task<IReadOnlyList<Fujify.Models.LicenseDeviceDto>> FetchRegisteredDevicesAsync() => Task.FromResult<IReadOnlyList<Fujify.Models.LicenseDeviceDto>>(Array.Empty<Fujify.Models.LicenseDeviceDto>());
+            public Task<bool> LogoutAccountAsync() => Task.FromResult(true);
+            public Task<LicenseActivationResult> VerifyCurrentLicenseAsync(bool forceNetwork = false) => Task.FromResult(new LicenseActivationResult(true));
+            public bool VerifyLicenseKey(string licenseKey, out string? email, out string? error) { email = null; error = null; return true; }
         }
     }
 }

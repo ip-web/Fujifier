@@ -282,6 +282,9 @@ namespace Fujify.ViewModels
             ConfirmModalActionCommand = new RelayCommand(() => ResolveConfirmation(true));
             CancelModalActionCommand = new RelayCommand(() => ResolveConfirmation(false));
 
+            OpenPlayStoreCommand = new RelayCommand(() => CrossPlatformLauncher.OpenUrl(UpdateGooglePlayUrl));
+            OpenGitHubReleaseCommand = new RelayCommand(() => CrossPlatformLauncher.OpenUrl(UpdateGitHubUrl));
+
             ShowFileErrorCommand = new RelayCommand<FileItem>(item =>
             {
                 if (item == null) return;
@@ -403,6 +406,8 @@ namespace Fujify.ViewModels
         public ICommand OpenGitHubCommand { get; }
         public ICommand OpenReleasesCommand { get; }
         public ICommand BuyProCommand { get; }
+        public ICommand OpenPlayStoreCommand { get; }
+        public ICommand OpenGitHubReleaseCommand { get; }
         public ICommand DelayGoogleSignInCommand { get; }
         public ICommand DelayToggleKeyCommand { get; }
         public ICommand DelayActivateKeyCommand { get; }
@@ -1374,6 +1379,7 @@ namespace Fujify.ViewModels
                     OnPropertyChanged(nameof(IsMessageModal));
                     OnPropertyChanged(nameof(IsFreeTierDelayModal));
                     OnPropertyChanged(nameof(IsBatchSummaryModal));
+                    OnPropertyChanged(nameof(IsUpdateAvailableModal));
                 }
             }
         }
@@ -1394,6 +1400,7 @@ namespace Fujify.ViewModels
                     OnPropertyChanged(nameof(IsFreeTierDelayModal));
                     OnPropertyChanged(nameof(IsConfirmationModal));
                     OnPropertyChanged(nameof(IsBatchSummaryModal));
+                    OnPropertyChanged(nameof(IsUpdateAvailableModal));
                     OnPropertyChanged(nameof(IsBottomSheetOpen));
                 }
             }
@@ -1407,7 +1414,8 @@ namespace Fujify.ViewModels
         public bool IsConfirmationModal => _modalType == "Confirmation";
         public bool IsFreeTierDelayModal => _modalType == "FreeTierDelay";
         public bool IsBatchSummaryModal => _modalType == "BatchSummary";
-        public bool IsBottomSheetOpen => _isModalOpen && (IsCameraPickerModal || IsConflictModal || IsMessageModal || IsConfirmationModal || IsFreeTierDelayModal || IsBatchSummaryModal);
+        public bool IsUpdateAvailableModal => _modalType == "UpdateAvailable";
+        public bool IsBottomSheetOpen => _isModalOpen && (IsCameraPickerModal || IsConflictModal || IsMessageModal || IsConfirmationModal || IsFreeTierDelayModal || IsBatchSummaryModal || IsUpdateAvailableModal);
 
         private string _modalTitle = string.Empty;
         public string ModalTitle
@@ -2015,6 +2023,86 @@ namespace Fujify.ViewModels
             else
             {
                 DelayLicenseError = result.ErrorMessage ?? "Invalid license key.";
+            }
+        }
+
+        private string _updateVersionText = string.Empty;
+        public string UpdateVersionText
+        {
+            get => _updateVersionText;
+            set
+            {
+                if (SetProperty(ref _updateVersionText, value))
+                {
+                    OnPropertyChanged(nameof(HasUpdateVersion));
+                }
+            }
+        }
+
+        public bool HasUpdateVersion => !string.IsNullOrWhiteSpace(_updateVersionText);
+
+        private string _updateGooglePlayUrl = "https://play.google.com/store/apps/details?id=com.ipweb.fujifier";
+        public string UpdateGooglePlayUrl
+        {
+            get => _updateGooglePlayUrl;
+            set => SetProperty(ref _updateGooglePlayUrl, value);
+        }
+
+        private string _updateGitHubUrl = "https://github.com/ip-web/Fujifier/releases/latest";
+        public string UpdateGitHubUrl
+        {
+            get => _updateGitHubUrl;
+            set => SetProperty(ref _updateGitHubUrl, value);
+        }
+
+        public async Task ShowUpdateAvailableModalAsync(UpdateInfo updateInfo)
+        {
+            if (updateInfo == null) return;
+
+            // If a free-tier delay modal is currently active/counting down, wait until the timer has run out
+            // and the user has completed or dismissed the delay modal before presenting the update dialog.
+            if (IsFreeTierDelayModal || (_freeTierDelayTcs != null && !_freeTierDelayTcs.Task.IsCompleted))
+            {
+                while (IsFreeTierDelayModal && DelayRemainingSeconds > 0)
+                {
+                    await Task.Delay(500);
+                }
+
+                if (_freeTierDelayTcs != null && !_freeTierDelayTcs.Task.IsCompleted)
+                {
+                    await Task.WhenAny(_freeTierDelayTcs.Task, Task.Delay(60000));
+                }
+
+                await Task.Delay(400);
+            }
+
+            void Action()
+            {
+                ModalTitle = LocalizationManager.Tr("NewVersionAvailable");
+                UpdateVersionText = $"v{updateInfo.VersionString}";
+                ModalMessage = string.IsNullOrWhiteSpace(updateInfo.Title) || updateInfo.Title == updateInfo.VersionString
+                    ? $"A new version of Fujifier is available: v{updateInfo.VersionString}.\nUpdate now to get the latest features and improvements."
+                    : $"A new version of Fujifier is available: v{updateInfo.VersionString} ({updateInfo.Title}).\nUpdate now to get the latest features and improvements.";
+
+                UpdateGooglePlayUrl = "https://play.google.com/store/apps/details?id=com.ipweb.fujifier";
+                UpdateGitHubUrl = !string.IsNullOrWhiteSpace(updateInfo.ReleaseUrl)
+                    ? updateInfo.ReleaseUrl
+                    : "https://github.com/ip-web/Fujifier/releases/latest";
+
+                ModalIcon = "🚀";
+                ModalIconColor = new SolidColorBrush(Color.Parse("#3498DB"));
+                ModalBadgeBackground = new SolidColorBrush(Color.FromArgb(40, 52, 152, 219));
+                ModalType = "UpdateAvailable";
+                IsModalOpen = true;
+            }
+
+            if (Avalonia.Application.Current == null || Dispatcher.UIThread.CheckAccess())
+            {
+                Action();
+            }
+            else
+            {
+                Dispatcher.UIThread.Post(Action);
             }
         }
 

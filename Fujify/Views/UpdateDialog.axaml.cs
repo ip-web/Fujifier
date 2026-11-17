@@ -178,9 +178,7 @@ namespace Fujify.Views
                 // Mobile or single-view fallback
                 if (MainViewModel.Instance != null)
                 {
-                    MainViewModel.Instance.ShowMessageModal(
-                        "New Version Available",
-                        $"A new version of Fujifier is available: v{updateInfo.VersionString}\n\nVisit GitHub to download the latest release.");
+                    await MainViewModel.Instance.ShowUpdateAvailableModalAsync(updateInfo);
                 }
                 return;
             }
