@@ -16,6 +16,16 @@
     <NoWarn>$(NoWarn);NU1608</NoWarn>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <AndroidEnableCodeShrinking>true</AndroidEnableCodeShrinking>
+    <AndroidLinkTool>r8</AndroidLinkTool>
+    <AndroidR8ObfuscationMode>private-members</AndroidR8ObfuscationMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProguardConfiguration Include="proguard.cfg" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Avalonia.Android" />
     <PackageReference Include="SkiaSharp.NativeAssets.Android" />

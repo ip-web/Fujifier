@@ -61,6 +61,14 @@ public class MainActivity : AvaloniaMainActivity
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         Instance = this;
+        try
+        {
+            AndroidX.Activity.EdgeToEdge.Enable(this);
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("Fujifier", $"Could not enable EdgeToEdge: {ex.Message}");
+        }
         AdManager.Instance.PreInitialize(this);
         base.OnCreate(savedInstanceState);
         Window?.SetSoftInputMode(SoftInput.AdjustResize | SoftInput.StateHidden);

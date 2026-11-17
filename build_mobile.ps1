@@ -216,9 +216,10 @@ if (-not $SkipAndroid) {
 
         Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-        # 1. Extract base from arm64 AAB
+        # 1. Extract base and metadata from arm64 AAB
         [System.IO.Compression.ZipFile]::ExtractToDirectory($arm64AabPath, $tempCombine)
         $baseDir = Join-Path $tempCombine "base"
+        $metadataDir = Join-Path $tempCombine "BUNDLE-METADATA"
 
         # 2. Extract x86_64 native libraries from x64 AAB
         $x64Zip = [System.IO.Compression.ZipFile]::OpenRead($x64AabPath)
@@ -248,17 +249,31 @@ if (-not $SkipAndroid) {
         $zipArchive.Dispose()
         $zipStream.Dispose()
 
-        # 4. Run bundletool build-bundle
-        & java -jar $bundletoolJar build-bundle --modules=$baseZip --output=$universalAabPath --overwrite | Out-Null
+        # 4. Prepare metadata flags for bundletool to include R8/ProGuard obfuscation maps
+        $metadataArgs = @()
+        if (Test-Path $metadataDir) {
+            $metaFiles = Get-ChildItem -Path $metadataDir -Recurse -File
+            foreach ($mf in $metaFiles) {
+                $relMeta = $mf.FullName.Substring($metadataDir.Length).TrimStart('\', '/').Replace('\', '/')
+                $metadataArgs += "--metadata-file=$relMeta`:$($mf.FullName)"
+            }
+        }
 
-        # 5. Sign the universal AAB with release upload keystore
+        # 5. Run bundletool build-bundle with metadata
+        if ($metadataArgs.Count -gt 0) {
+            & java -jar $bundletoolJar build-bundle --modules=$baseZip --output=$universalAabPath --overwrite @metadataArgs | Out-Null
+        } else {
+            & java -jar $bundletoolJar build-bundle --modules=$baseZip --output=$universalAabPath --overwrite | Out-Null
+        }
+
+        # 6. Sign the universal AAB with release upload keystore
         if ($KeystorePath -and (Test-Path $KeystorePath)) {
             Write-Host "Signing Universal AAB with release upload key ($KeystorePath)..." -ForegroundColor Yellow
             & jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore $KeystorePath -storepass $KeystorePass -tsa "http://timestamp.digicert.com" $universalAabPath $KeyAlias | Out-Null
             Write-Host "[OK] Universal AAB signed with release key '$KeyAlias'." -ForegroundColor Green
         }
 
-        # 6. Copy to dist
+        # 7. Copy to dist
         Copy-Item -Path $universalAabPath -Destination (Join-Path $distDir "Fujifier-v2.2.0-Android.aab") -Force
         $uniSizeMb = [math]::Round((Get-Item $universalAabPath).Length / 1MB, 2)
         Write-Host "Universal Multi-Architecture AAB generated: $universalAabPath ($uniSizeMb MB)" -ForegroundColor Green
