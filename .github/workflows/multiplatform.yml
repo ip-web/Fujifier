@@ -100,7 +100,7 @@ jobs:
 
       - name: Publish Linux Desktop x64
         run: |
-          dotnet restore Fujify/Fujify.csproj
+          dotnet restore Fujify/Fujify.csproj -r linux-x64
           dotnet publish Fujify/Fujify.csproj -f net10.0 -c Release -r linux-x64 --self-contained true --no-restore -o ./publish/linux-x64
           cp Fujify/libs/linux-x64/*.so ./publish/linux-x64/ 2>/dev/null || true
 
@@ -300,7 +300,7 @@ jobs:
           ls -la Fujify.iOS/Frameworks/
 
       - name: Restore iOS Project
-        run: dotnet restore Fujify.iOS/Fujify.iOS.csproj
+        run: dotnet restore Fujify.iOS/Fujify.iOS.csproj -r ios-arm64
 
       - name: Build and Package iOS IPA
         run: |
