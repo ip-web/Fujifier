@@ -127,7 +127,7 @@ public class MainActivity : AvaloniaMainActivity
             }
         }
 
-        // Crash interceptor
+        // Crash interceptor: log exception without swallowing fatal crashes into broken state
         global::Android.Runtime.AndroidEnvironment.UnhandledExceptionRaiser += (sender, args) =>
         {
             var ex = args.Exception;
@@ -138,7 +138,6 @@ public class MainActivity : AvaloniaMainActivity
                 File.WriteAllText(logPath, ex.ToString());
             }
             catch { }
-            args.Handled = true;
         };
 
         AppDomain.CurrentDomain.UnhandledException += (sender, args) =>
@@ -779,6 +778,17 @@ public class MainActivity : AvaloniaMainActivity
         RequestRuntimeStoragePermissions();
     }
 
+    private static string SanitizeSubfolderName(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+        string cleaned = raw.Replace('/', '_').Replace('\\', '_').Trim().Trim('.');
+        foreach (char c in Path.GetInvalidFileNameChars())
+        {
+            cleaned = cleaned.Replace(c, '_');
+        }
+        return cleaned;
+    }
+
     public static void SaveConvertedPhotoToGallery(Context context, string filePath)
     {
         try
@@ -797,17 +807,20 @@ public class MainActivity : AvaloniaMainActivity
                     !dirName.Equals("Fujifier_Staging", StringComparison.OrdinalIgnoreCase) &&
                     !dirName.Equals("cache", StringComparison.OrdinalIgnoreCase))
                 {
-                    subfolder = dirName;
+                    subfolder = SanitizeSubfolderName(dirName);
                 }
             }
 
             if (string.IsNullOrEmpty(subfolder) && vm != null && vm.CreateSubfolder)
             {
-                string preview = vm.SubfolderPreview;
-                if (!string.IsNullOrWhiteSpace(preview))
-                {
-                    subfolder = preview.Trim();
-                }
+                string resolvedSubdir = OutputLocationHelper.ComputeTargetDirectory(
+                    filePath,
+                    customOutputFolder: null,
+                    createSubfolder: true,
+                    subfolderUseOriginalName: vm.SubfolderUseOriginalName,
+                    subfolderSuffix: vm.SubfolderSuffix,
+                    subfolderCustomName: vm.SubfolderCustomName);
+                subfolder = SanitizeSubfolderName(Path.GetFileName(resolvedSubdir));
             }
 
             bool mediaStoreSaved = false;
@@ -818,49 +831,55 @@ public class MainActivity : AvaloniaMainActivity
                 mediaStoreSaved = SaveToMediaStore(context, filePath, fileName, subfolder);
             }
 
-            // 2. Direct POSIX copy fallback / sync to /storage/emulated/0/Pictures/Fujifier/<subfolder>
-            string picturesDir = global::Android.OS.Environment.GetExternalStoragePublicDirectory(
-                global::Android.OS.Environment.DirectoryPictures)?.AbsolutePath ?? "";
-
+            // 2. Direct POSIX copy fallback only on pre-Android 10 or if MediaStore insert failed (avoids duplicate gallery entries)
             string targetPosixPath = string.Empty;
-            if (!string.IsNullOrEmpty(picturesDir))
+            if (!mediaStoreSaved)
             {
-                try
+                string picturesDir = global::Android.OS.Environment.GetExternalStoragePublicDirectory(
+                    global::Android.OS.Environment.DirectoryPictures)?.AbsolutePath ?? "";
+
+                if (!string.IsNullOrEmpty(picturesDir))
                 {
-                    string targetFolder = !string.IsNullOrEmpty(subfolder)
-                        ? Path.Combine(picturesDir, "Fujifier", subfolder)
-                        : Path.Combine(picturesDir, "Fujifier");
-                    if (!Directory.Exists(targetFolder))
+                    try
                     {
-                        Directory.CreateDirectory(targetFolder);
+                        string targetFolder = !string.IsNullOrEmpty(subfolder)
+                            ? Path.Combine(picturesDir, "Fujifier", subfolder)
+                            : Path.Combine(picturesDir, "Fujifier");
+                        if (!Directory.Exists(targetFolder))
+                        {
+                            Directory.CreateDirectory(targetFolder);
+                        }
+                        targetPosixPath = Path.Combine(targetFolder, fileName);
+                        if (!string.Equals(filePath, targetPosixPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            File.Copy(filePath, targetPosixPath, overwrite: true);
+                        }
                     }
-                    targetPosixPath = Path.Combine(targetFolder, fileName);
-                    if (!string.Equals(filePath, targetPosixPath, StringComparison.OrdinalIgnoreCase))
+                    catch (Exception ex)
                     {
-                        File.Copy(filePath, targetPosixPath, overwrite: true);
+                        global::Android.Util.Log.Warn("Fujifier", $"Direct POSIX copy to Pictures/Fujifier not permitted: {ex.Message}");
                     }
                 }
-                catch (Exception ex)
+
+                if (!string.IsNullOrEmpty(targetPosixPath) && File.Exists(targetPosixPath))
                 {
-                    global::Android.Util.Log.Warn("Fujifier", $"Direct POSIX copy to Pictures/Fujifier not permitted: {ex.Message}");
+                    global::Android.Media.MediaScannerConnection.ScanFile(
+                        context,
+                        new[] { targetPosixPath },
+                        new[] { "image/x-adobe-dng" },
+                        null);
                 }
             }
 
-            // 3. Scan with MediaScannerConnection so device gallery, file managers, and Lightroom detect it
-            string scanFolder = !string.IsNullOrEmpty(subfolder)
-                ? Path.Combine(picturesDir, "Fujifier", subfolder)
-                : Path.Combine(picturesDir, "Fujifier");
-            string scanPath = !string.IsNullOrEmpty(targetPosixPath) && File.Exists(targetPosixPath)
-                ? targetPosixPath
-                : Path.Combine(scanFolder, fileName);
+            // 3. Prune temporary staged copy after successful gallery export to avoid leaking app cache storage
+            if ((mediaStoreSaved || (!string.IsNullOrEmpty(targetPosixPath) && File.Exists(targetPosixPath))) &&
+                filePath.Contains("Fujifier_Staging", StringComparison.OrdinalIgnoreCase) &&
+                File.Exists(filePath))
+            {
+                try { File.Delete(filePath); } catch { }
+            }
 
-            global::Android.Media.MediaScannerConnection.ScanFile(
-                context,
-                new[] { scanPath, filePath },
-                new[] { "image/x-adobe-dng", "image/dng" },
-                null);
-
-            global::Android.Util.Log.Info("Fujifier", $"SaveConvertedPhotoToGallery completed: fileName={fileName}, subfolder={subfolder}, mediaStoreSaved={mediaStoreSaved}, posixExists={File.Exists(targetPosixPath)}");
+            global::Android.Util.Log.Info("Fujifier", $"SaveConvertedPhotoToGallery completed: fileName={fileName}, subfolder={subfolder}, mediaStoreSaved={mediaStoreSaved}, posixExists={!string.IsNullOrEmpty(targetPosixPath) && File.Exists(targetPosixPath)}");
         }
         catch (Exception ex)
         {

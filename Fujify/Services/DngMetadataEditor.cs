@@ -217,6 +217,27 @@ namespace Fujify.Services
             }
         }
 
+        private const uint MaxXmpTagBytes = 64 * 1024 * 1024; // 64 MiB defensive limit against corrupt IFDs
+
+        private static bool TryReadExactBytes(Stream fs, uint offset, uint count, out byte[] buffer)
+        {
+            buffer = Array.Empty<byte>();
+            if (count == 0 || count > MaxXmpTagBytes) return false;
+            if ((ulong)offset + count > (ulong)fs.Length) return false;
+            buffer = new byte[count];
+            fs.Seek(offset, SeekOrigin.Begin);
+            try
+            {
+                fs.ReadExactly(buffer, 0, (int)count);
+                return true;
+            }
+            catch (EndOfStreamException)
+            {
+                buffer = Array.Empty<byte>();
+                return false;
+            }
+        }
+
         /// <summary>
         /// Reads the Adobe XMP packet (Tag 0x02BC) from a DNG file.
         /// </summary>
@@ -231,12 +252,10 @@ namespace Fujify.Services
 
                 var entries = ReadIfdEntries(fs, ifd0Offset, isLittleEndian);
                 var xmpEntry = entries.FirstOrDefault(e => e.Tag == TagXmp);
-                if (xmpEntry == null || xmpEntry.Count == 0) return null;
-
-                byte[] xmpBytes = new byte[xmpEntry.Count];
-                fs.Seek(xmpEntry.ValueOrOffset, SeekOrigin.Begin);
-                int read = fs.Read(xmpBytes, 0, (int)xmpEntry.Count);
-                if (read < xmpBytes.Length) return null;
+                if (xmpEntry == null || !TryReadExactBytes(fs, xmpEntry.ValueOrOffset, xmpEntry.Count, out byte[] xmpBytes))
+                {
+                    return null;
+                }
 
                 return Encoding.UTF8.GetString(xmpBytes);
             }
@@ -346,15 +365,9 @@ namespace Fujify.Services
                 // 2. Read existing XMP packet if present
                 string? existingXmp = null;
                 var existingXmpEntry = entries.FirstOrDefault(e => e.Tag == TagXmp);
-                if (existingXmpEntry != null && existingXmpEntry.Count > 0)
+                if (existingXmpEntry != null && TryReadExactBytes(fs, existingXmpEntry.ValueOrOffset, existingXmpEntry.Count, out byte[] oldXmpBytes))
                 {
-                    byte[] oldXmpBytes = new byte[existingXmpEntry.Count];
-                    fs.Seek(existingXmpEntry.ValueOrOffset, SeekOrigin.Begin);
-                    int xmpRead = fs.Read(oldXmpBytes, 0, (int)existingXmpEntry.Count);
-                    if (xmpRead == existingXmpEntry.Count)
-                    {
-                        existingXmp = Encoding.UTF8.GetString(oldXmpBytes);
-                    }
+                    existingXmp = Encoding.UTF8.GetString(oldXmpBytes);
                 }
 
                 // 3. Prepare updated XMP and UniqueCameraModel payloads
@@ -368,9 +381,18 @@ namespace Fujify.Services
                 long appendPos = fs.Length;
                 // Align to 4 bytes
                 appendPos = (appendPos + 3) & ~3;
+
+                // Validate 32-bit TIFF offset limit before mutating the file
+                long estimatedEnd = appendPos + modelBytes.Length + 4 + newXmpBytes.Length + 4 + 2 + ((entries.Count + 2) * 12) + 4;
+                if (estimatedEnd > uint.MaxValue)
+                {
+                    return new MetadataResult(false, "Target DNG exceeds 4 GiB standard TIFF 32-bit offset limit.");
+                }
+
                 fs.Seek(appendPos, SeekOrigin.Begin);
 
                 // Write UniqueCameraModel payload
+                if (fs.Position > uint.MaxValue) return new MetadataResult(false, "TIFF offset overflow.");
                 uint modelPayloadOffset = (uint)fs.Position;
                 fs.Write(modelBytes, 0, modelBytes.Length);
 
@@ -378,6 +400,7 @@ namespace Fujify.Services
                 AlignStream4(fs);
 
                 // Write XMP payload
+                if (fs.Position > uint.MaxValue) return new MetadataResult(false, "TIFF offset overflow.");
                 uint xmpPayloadOffset = (uint)fs.Position;
                 fs.Write(newXmpBytes, 0, newXmpBytes.Length);
 
@@ -410,6 +433,7 @@ namespace Fujify.Services
                 entries.Sort((a, b) => a.Tag.CompareTo(b.Tag));
 
                 // 6. Write new IFD0 table at end of file
+                if (fs.Position > uint.MaxValue) return new MetadataResult(false, "TIFF offset overflow.");
                 uint newIfd0Offset = (uint)fs.Position;
                 WriteUInt16(fs, (ushort)entries.Count, isLittleEndian);
 
@@ -509,7 +533,14 @@ namespace Fujify.Services
 
             byte[] header = new byte[8];
             stream.Seek(0, SeekOrigin.Begin);
-            if (stream.Read(header, 0, 8) < 8) return false;
+            try
+            {
+                stream.ReadExactly(header, 0, 8);
+            }
+            catch (EndOfStreamException)
+            {
+                return false;
+            }
 
             if (header[0] == 0x49 && header[1] == 0x49)
             {
@@ -544,14 +575,28 @@ namespace Fujify.Services
 
             stream.Seek(ifdOffset, SeekOrigin.Begin);
             byte[] countBuf = new byte[2];
-            if (stream.Read(countBuf, 0, 2) < 2) return list;
+            try
+            {
+                stream.ReadExactly(countBuf, 0, 2);
+            }
+            catch (EndOfStreamException)
+            {
+                return list;
+            }
 
             ushort count = ReadUInt16(countBuf, 0, isLittleEndian);
             if (count > 2000) return list; // Safety limit
+            if (ifdOffset + 2L + (count * 12L) > stream.Length) return list;
 
             byte[] entriesBuf = new byte[count * 12];
-            int read = stream.Read(entriesBuf, 0, entriesBuf.Length);
-            if (read < entriesBuf.Length) return list;
+            try
+            {
+                stream.ReadExactly(entriesBuf, 0, entriesBuf.Length);
+            }
+            catch (EndOfStreamException)
+            {
+                return list;
+            }
 
             for (int i = 0; i < count; i++)
             {
@@ -565,9 +610,10 @@ namespace Fujify.Services
                 });
             }
 
-            byte[] nextBuf = new byte[4];
-            if (stream.Read(nextBuf, 0, 4) == 4)
+            if (stream.Position + 4 <= stream.Length)
             {
+                byte[] nextBuf = new byte[4];
+                stream.ReadExactly(nextBuf, 0, 4);
                 nextIfdOffset = ReadUInt32(nextBuf, 0, isLittleEndian);
             }
 
@@ -771,8 +817,14 @@ namespace Fujify.Services
             }
         }
 
+        private static string EscapeXml(string? value) =>
+            System.Security.SecurityElement.Escape(value ?? string.Empty) ?? string.Empty;
+
         private static string BuildDefaultXmpXml(string make, string model, string uniqueModel)
         {
+            string safeMake = EscapeXml(make);
+            string safeModel = EscapeXml(model);
+            string safeUniqueModel = EscapeXml(uniqueModel);
             return $@"<x:xmpmeta xmlns:x='adobe:ns:meta/' x:xmptk='Fujify Native'>
 <rdf:RDF xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#'>
  <rdf:Description rdf:about=''
@@ -782,9 +834,9 @@ namespace Fujify.Services
    <rdf:Seq>
     <rdf:li rdf:parseType='Resource'>
      <stCamera:CameraRawProfile>True</stCamera:CameraRawProfile>
-     <stCamera:Make>{make}</stCamera:Make>
-     <stCamera:Model>{model}</stCamera:Model>
-     <stCamera:UniqueCameraModel>{uniqueModel}</stCamera:UniqueCameraModel>
+     <stCamera:Make>{safeMake}</stCamera:Make>
+     <stCamera:Model>{safeModel}</stCamera:Model>
+     <stCamera:UniqueCameraModel>{safeUniqueModel}</stCamera:UniqueCameraModel>
     </rdf:li>
    </rdf:Seq>
   </photoshop:CameraProfiles>

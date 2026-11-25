@@ -120,7 +120,7 @@ namespace Fujify.Services
             if (_httpClient.DefaultRequestHeaders.UserAgent.Count == 0)
             {
                 _httpClient.DefaultRequestHeaders.UserAgent.Add(
-                    new ProductInfoHeaderValue("Fujifier-App", "2.2.0"));
+                    new ProductInfoHeaderValue("Fujifier-App", "2.2.1"));
             }
 
             Initialize();
@@ -257,7 +257,7 @@ namespace Fujify.Services
                     DeviceId = deviceId,
                     DeviceName = deviceName,
                     Platform = platform,
-                    AppVersion = "2.2.0"
+                    AppVersion = "2.2.1"
                 };
 
                 string url = $"{GetApiBaseUrl()}/license/activate";
@@ -1186,6 +1186,13 @@ namespace Fujify.Services
                     NotifyLicenseChanged();
                     return new LicenseActivationResult(false, "License is no longer active on the server.");
                 }
+
+                if (offlineExpiry.HasValue && offlineExpiry.Value > DateTime.UtcNow)
+                {
+                    return new LicenseActivationResult(true, null, _currentStatus);
+                }
+
+                return new LicenseActivationResult(false, $"License verification failed (HTTP {(int)response.StatusCode}).", _currentStatus);
             }
             catch (Exception ex)
             {
@@ -1195,9 +1202,9 @@ namespace Fujify.Services
                 {
                     return new LicenseActivationResult(true, null, _currentStatus);
                 }
-            }
 
-            return new LicenseActivationResult(true, null, _currentStatus);
+                return new LicenseActivationResult(false, $"License verification error: {ex.Message}", _currentStatus);
+            }
         }
 
         public bool VerifyLicenseKey(string licenseKey, out string? email, out string? error)
@@ -1307,7 +1314,7 @@ namespace Fujify.Services
                     DeviceId = CurrentDeviceId,
                     DeviceName = _deviceIdentity.GetDeviceName(),
                     Platform = _deviceIdentity.GetPlatform(),
-                    AppVersion = "2.2.0",
+                    AppVersion = "2.2.1",
                     LastCheckIn = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")
                 }
             });

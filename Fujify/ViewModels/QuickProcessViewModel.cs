@@ -417,6 +417,14 @@ namespace Fujify.ViewModels
             // If processing already completed, restart conversion for late-arriving files
             if (_isCompleted && !_isConfiguringOptions)
             {
+                lock (_convertedDngFiles)
+                {
+                    _convertedDngFiles.Clear();
+                }
+                lock (_reservedOutputPaths)
+                {
+                    _reservedOutputPaths.Clear();
+                }
                 _started = false;
                 _isCompleted = false;
                 _isProcessing = true;
@@ -711,15 +719,6 @@ namespace Fujify.ViewModels
             bool isCaptureOneMode = IsCaptureOneModeSelected;
             string targetExt = isCaptureOneMode ? ".raf" : ".dng";
             bool isOriginallyTarget = filePath.EndsWith(targetExt, StringComparison.OrdinalIgnoreCase);
-            bool isOriginallyDng = filePath.EndsWith(".dng", StringComparison.OrdinalIgnoreCase);
-            bool isOriginallyRaf = filePath.EndsWith(".raf", StringComparison.OrdinalIgnoreCase);
-
-            string baseFileName = Path.GetFileNameWithoutExtension(filePath);
-            bool appendSuffix = AppendSuffix && !string.IsNullOrWhiteSpace(Suffix);
-            if (appendSuffix)
-            {
-                baseFileName += Suffix.Trim();
-            }
 
             var snapshotSettings = new AppSettings
             {
@@ -757,298 +756,29 @@ namespace Fujify.ViewModels
                 }
             }
 
-            if (isCaptureOneMode)
-            {
-                // 1. If input file is ALREADY a Fujifilm RAF file, patch camera model
-                if (isOriginallyRaf)
-                {
-                    bool isBayer = _rafConverterService.IsBayerSensor(filePath);
-                    string targetModel = isBayer ? "GFX50S II" : "X-T5";
+            var request = new SingleConversionRequest(
+                SourceFilePath: filePath,
+                FinalDestFilePath: finalDestFilePath,
+                OutputFolder: outputFolder,
+                CreateBackup: createBackup,
+                EmbedOriginalRaw: _settingsService.Settings.EmbedOriginalRaw,
+                LosslessCompression: _licenseService.IsPro && _settingsService.Settings.LosslessCompression,
+                VerifyFileIntegrity: _settingsService.Settings.VerifyFileIntegrity || _verifyFileIntegrity,
+                IsCaptureOneMode: isCaptureOneMode,
+                RafContainerPath: _settingsService.Settings.RafContainerPath,
+                TargetUniqueCameraModel: "Fujifilm X-T5");
 
-                    string? patchDestDir = Path.GetDirectoryName(finalDestFilePath);
-                    if (!string.IsNullOrEmpty(patchDestDir) && !Directory.Exists(patchDestDir))
-                    {
-                        Directory.CreateDirectory(patchDestDir);
-                    }
-
-                    string sourceForPatch = filePath;
-                    if (isExactSameFilePath && createBackup && isSameFolder)
-                    {
-                        string origBaseName = Path.GetFileNameWithoutExtension(filePath);
-                        string origBackup = Path.Combine(inputDir, $"{origBaseName}ORIG.RAF");
-                        if (File.Exists(origBackup)) File.Delete(origBackup);
-                        File.Move(filePath, origBackup);
-                        sourceForPatch = origBackup;
-                    }
-
-                    var patchResult = await _rafConverterService.PatchModelAsync(
-                        sourceForPatch,
-                        finalDestFilePath,
-                        targetModel,
-                        ct);
-
-                    if (!patchResult.Success)
-                    {
-                        throw new InvalidOperationException(patchResult.ErrorMessage ?? "RAF model patch failed");
-                    }
-
-                    if (_settingsService.Settings.VerifyFileIntegrity || _verifyFileIntegrity)
-                    {
-                        var integrity = await _fileIntegrityService.VerifyIntegrityAsync(finalDestFilePath, ct);
-                        if (!integrity.IsValid)
-                        {
-                            string err = $"File integrity check failed: {integrity.ErrorMessage}";
-                            if (File.Exists(finalDestFilePath) && !string.Equals(Path.GetFullPath(sourceForPatch), Path.GetFullPath(finalDestFilePath), StringComparison.OrdinalIgnoreCase))
-                            {
-                                try { File.Delete(finalDestFilePath); } catch { }
-                            }
-                            if (isExactSameFilePath && createBackup && isSameFolder && File.Exists(sourceForPatch) && !File.Exists(filePath))
-                            {
-                                try { File.Move(sourceForPatch, filePath); } catch { }
-                            }
-                            throw new InvalidOperationException(err);
-                        }
-                    }
-
-                    if (!createBackup && !string.Equals(Path.GetFullPath(sourceForPatch), Path.GetFullPath(finalDestFilePath), StringComparison.OrdinalIgnoreCase))
-                    {
-                        FileTrashHelper.SendToTrash(sourceForPatch);
-                    }
-
-                    return finalDestFilePath;
-                }
-
-                // 2. Repack RAW into Fujifilm RAF container
-                string? containerPath = _settingsService.Settings.RafContainerPath;
-                string resolvedContainer = _rafConverterService.ResolveContainerArgument(containerPath);
-                if (string.IsNullOrWhiteSpace(resolvedContainer) || !_rafConverterService.HasValidContainer(resolvedContainer))
-                {
-                    throw new InvalidOperationException(LocalizationManager.Tr("MissingRafContainerError"));
-                }
-
-                string? destDir = Path.GetDirectoryName(finalDestFilePath);
-                if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
-                {
-                    Directory.CreateDirectory(destDir);
-                }
-
-                var convResult = await _rafConverterService.ConvertToRafAsync(
-                    filePath,
-                    finalDestFilePath,
-                    resolvedContainer,
-                    null,
-                    ct);
-
-                if (!convResult.Success || string.IsNullOrEmpty(convResult.OutputRafPath))
-                {
-                    throw new InvalidOperationException(convResult.ErrorMessage ?? "Conversion to RAF failed");
-                }
-
-                if (_settingsService.Settings.VerifyFileIntegrity || _verifyFileIntegrity)
-                {
-                    var integrity = await _fileIntegrityService.VerifyIntegrityAsync(finalDestFilePath, ct);
-                    if (!integrity.IsValid)
-                    {
-                        string err = $"File integrity check failed: {integrity.ErrorMessage}";
-                        if (File.Exists(finalDestFilePath) && !string.Equals(Path.GetFullPath(filePath), Path.GetFullPath(finalDestFilePath), StringComparison.OrdinalIgnoreCase))
-                        {
-                            try { File.Delete(finalDestFilePath); } catch { }
-                        }
-                        throw new InvalidOperationException(err);
-                    }
-                }
-
-                if (!createBackup)
-                {
-                    FileTrashHelper.SendToTrash(filePath);
-                }
-
-                return finalDestFilePath;
-            }
-            else
-            {
-                // Lightroom (DNG) Mode
-                string? dngFilePath = filePath;
-                string? tempInPlaceOutputFile = null;
-                string? origBackupPath = null;
-
-                if (isOriginallyDng)
-                {
-                    if (createBackup && isSameFolder)
-                    {
-                        string origBaseName = Path.GetFileNameWithoutExtension(filePath);
-                        origBackupPath = Path.Combine(inputDir, $"{origBaseName}ORIG.DNG");
-                        if (File.Exists(origBackupPath))
-                        {
-                            File.Delete(origBackupPath);
-                        }
-                        File.Move(filePath, origBackupPath);
-                        dngFilePath = origBackupPath;
-                    }
-                    else if (!createBackup && isExactSameFilePath)
-                    {
-                        string origBaseName = Path.GetFileNameWithoutExtension(filePath);
-                        tempInPlaceOutputFile = Path.Combine(outputDir, $"{origBaseName}_tmp_{Guid.NewGuid():N}.dng");
-                    }
-                }
-
-                try
-                {
-                    if (!isOriginallyDng)
-                    {
-                        bool embedOriginalRaw = _settingsService.Settings.EmbedOriginalRaw;
-
-                        // Ensure destination directory exists directly before converting
-                        string? targetDir = Path.GetDirectoryName(finalDestFilePath);
-                        if (!string.IsNullOrEmpty(targetDir) && !Directory.Exists(targetDir))
-                        {
-                            Directory.CreateDirectory(targetDir);
-                        }
-
-                        // Convert directly into final destination path (no in-place temp files)
-                        string targetDngForConversion = finalDestFilePath;
-
-                        bool useLossless = _licenseService.IsPro && _settingsService.Settings.LosslessCompression;
-                        ct.ThrowIfCancellationRequested();
-                        var convResult = _rawConverterService.ConvertToDng(
-                            filePath,
-                            embedOriginalRaw,
-                            targetDngForConversion,
-                            useLossless);
-
-                        if (!convResult.Success || string.IsNullOrEmpty(convResult.OutputDngPath))
-                        {
-                            throw new InvalidOperationException(convResult.ErrorMessage ?? "Conversion failed");
-                        }
-
-                        dngFilePath = convResult.OutputDngPath;
-                    }
-
-                    string? customOutputPath = tempInPlaceOutputFile ?? ((!string.IsNullOrEmpty(outputFolder) || finalDestFilePath != dngFilePath)
-                        ? finalDestFilePath
-                        : null);
-
-                    if (!string.IsNullOrEmpty(customOutputPath))
-                    {
-                        string? destDir = Path.GetDirectoryName(customOutputPath);
-                        if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
-                        {
-                            Directory.CreateDirectory(destDir);
-                        }
-                    }
-
-                    ct.ThrowIfCancellationRequested();
-                    var metaResult = _metadataService.InjectFujifilmMetadata(
-                        dngFilePath,
-                        outputFolder,
-                        createBackup: false,
-                        isOriginallyDng: isOriginallyDng,
-                        customOutputFilePath: customOutputPath,
-                        targetUniqueCameraModel: "Fujifilm X-T5",
-                        sourceRawFilePath: filePath);
-
-                    if (!metaResult.Success)
-                    {
-                        if (!isOriginallyDng && !string.IsNullOrEmpty(finalDestFilePath) && File.Exists(finalDestFilePath))
-                        {
-                            try { File.Delete(finalDestFilePath); } catch { }
-                        }
-                        if (!string.IsNullOrEmpty(tempInPlaceOutputFile) && File.Exists(tempInPlaceOutputFile))
-                        {
-                            try { File.Delete(tempInPlaceOutputFile); } catch { }
-                        }
-                        if (isOriginallyDng && createBackup && isSameFolder && !string.IsNullOrEmpty(origBackupPath) && File.Exists(origBackupPath) && !File.Exists(filePath))
-                        {
-                            try { File.Move(origBackupPath, filePath); } catch { }
-                        }
-                        throw new InvalidOperationException(metaResult.ErrorMessage ?? "Error injecting Fujifilm metadata");
-                    }
-
-                    string targetToVerify = !string.IsNullOrEmpty(tempInPlaceOutputFile)
-                        ? tempInPlaceOutputFile
-                        : finalDestFilePath;
-
-                    if (_settingsService.Settings.VerifyFileIntegrity || _verifyFileIntegrity)
-                    {
-                        var integrity = await _fileIntegrityService.VerifyIntegrityAsync(targetToVerify, ct);
-                        if (!integrity.IsValid)
-                        {
-                            string err = $"File integrity check failed: {integrity.ErrorMessage}";
-                            if (!string.IsNullOrEmpty(tempInPlaceOutputFile) && File.Exists(tempInPlaceOutputFile))
-                            {
-                                try { File.Delete(tempInPlaceOutputFile); } catch { }
-                            }
-                            if (!isOriginallyDng && !string.IsNullOrEmpty(finalDestFilePath) && File.Exists(finalDestFilePath))
-                            {
-                                try { File.Delete(finalDestFilePath); } catch { }
-                            }
-                            if (isOriginallyDng && createBackup && isSameFolder && !string.IsNullOrEmpty(origBackupPath) && File.Exists(origBackupPath) && !File.Exists(filePath))
-                            {
-                                try { File.Move(origBackupPath, filePath); } catch { }
-                            }
-                            throw new InvalidOperationException(err);
-                        }
-                    }
-
-                    if (!string.IsNullOrEmpty(tempInPlaceOutputFile))
-                    {
-                        FileTrashHelper.SendToTrash(filePath);
-                        File.Move(tempInPlaceOutputFile, finalDestFilePath, overwrite: true);
-                    }
-                    else if (!createBackup)
-                    {
-                        FileTrashHelper.SendToTrash(filePath);
-
-                        // Also trash original sidecar if it was copied or embedded and differs from the final output sidecar
-                        string? origSidecar = DngMetadataEditor.FindSidecarXmp(filePath);
-                        if (!string.IsNullOrEmpty(origSidecar) && File.Exists(origSidecar))
-                        {
-                            string targetSidecar = Path.ChangeExtension(finalDestFilePath, ".xmp");
-                            if (!string.Equals(Path.GetFullPath(origSidecar), Path.GetFullPath(targetSidecar), StringComparison.OrdinalIgnoreCase))
-                            {
-                                FileTrashHelper.SendToTrash(origSidecar);
-                            }
-                        }
-                    }
-
-                    return finalDestFilePath;
-                }
-                catch
-                {
-                    if (!isOriginallyDng && !string.IsNullOrEmpty(finalDestFilePath) && File.Exists(finalDestFilePath))
-                    {
-                        try { File.Delete(finalDestFilePath); } catch { }
-                    }
-                    if (!string.IsNullOrEmpty(tempInPlaceOutputFile) && File.Exists(tempInPlaceOutputFile))
-                    {
-                        try { File.Delete(tempInPlaceOutputFile); } catch { }
-                    }
-                    if (isOriginallyDng && createBackup && isSameFolder && !string.IsNullOrEmpty(origBackupPath) && File.Exists(origBackupPath) && !File.Exists(filePath))
-                    {
-                        try { File.Move(origBackupPath, filePath); } catch { }
-                    }
-                    throw;
-                }
-            }
+            return await ConversionPipelineHelper.ExecuteSingleConversionAsync(
+                request,
+                _rawConverterService,
+                _rafConverterService,
+                _metadataService,
+                _fileIntegrityService,
+                ct);
         }
 
-        private static string GetUniqueFilePath(string filePath, HashSet<string>? reservedPaths = null)
-        {
-            string directory = Path.GetDirectoryName(filePath) ?? string.Empty;
-            string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(filePath);
-            string extension = Path.GetExtension(filePath);
-
-            int counter = 1;
-            string newFilePath;
-            do
-            {
-                newFilePath = Path.Combine(directory, $"{fileNameWithoutExtension} ({counter}){extension}");
-                counter++;
-            } while (File.Exists(newFilePath) || (reservedPaths != null && reservedPaths.Contains(newFilePath)));
-
-            reservedPaths?.Add(newFilePath);
-            return newFilePath;
-        }
+        private static string GetUniqueFilePath(string filePath, HashSet<string>? reservedPaths = null) =>
+            ConversionPipelineHelper.GetUniqueFilePath(filePath, reservedPaths);
 
         private void Cancel()
         {

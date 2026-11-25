@@ -222,16 +222,23 @@
                                 </Border>
                             </ScrollViewer>
 
-                            <!-- Mobile Card List -->
-                            <ScrollViewer IsVisible="{Binding HasFiles}" HorizontalScrollBarVisibility="Disabled"
-                                          IsScrollInertiaEnabled="True">
-                                <ItemsControl ItemsSource="{Binding Files}" Margin="16,6,16,80">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <VirtualizingStackPanel />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
+                            <!-- Mobile Card List (virtualized: ScrollViewer inside ItemsControl template) -->
+                            <ItemsControl IsVisible="{Binding HasFiles}" ItemsSource="{Binding Files}">
+                                <ItemsControl.Template>
+                                    <ControlTemplate>
+                                        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                                      VerticalScrollBarVisibility="Auto"
+                                                      IsScrollInertiaEnabled="True">
+                                            <ItemsPresenter Margin="16,6,16,80"/>
+                                        </ScrollViewer>
+                                    </ControlTemplate>
+                                </ItemsControl.Template>
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <VirtualizingStackPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="models:FileItem">
                                             <Border Classes="mobile-card" Classes.selected="{Binding IsSelected}"
                                                     Margin="0,5" Padding="12" CornerRadius="16"
@@ -304,9 +311,8 @@
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
 
                             <!-- Mobile Add Menu Backdrop (Dismisses floating menu when tapped with smooth fade) -->
                             <Border x:Name="MobileAddBackdrop"
@@ -2799,7 +2805,7 @@
                         <StackPanel HorizontalAlignment="Center" Spacing="6">
                             <Image Source="/Assets/images/logoXL.png" Width="52" Height="52" HorizontalAlignment="Center"/>
                             <TextBlock Text="Fujifier" FontSize="19" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}" HorizontalAlignment="Center"/>
-                            <TextBlock Text="Version 2.2.0 (Cross-Platform)" FontSize="11" 
+                            <TextBlock Text="Version 2.2.1 (Cross-Platform)" FontSize="11" 
                                        Foreground="{DynamicResource AppTextSecondaryBrush}" HorizontalAlignment="Center"/>
                         </StackPanel>
 

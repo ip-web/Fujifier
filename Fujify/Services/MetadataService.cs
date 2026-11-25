@@ -29,7 +29,22 @@ namespace Fujify.Services
 {
     public class MetadataService : IMetadataService
     {
-        private const string CommonArgs = "-CameraProfilesMake=\"FUJIFILM\" -CameraProfilesModel=\"X-T5\" -CameraProfilesUniqueCameraModel=\"Fujifilm X-T5\" -CameraProfilesCameraRawProfile=\"True\" -UniqueCameraModel=\"Fujifilm X-T5\"";
+        private static string BuildExifToolProfileArgs(string targetUniqueCameraModel)
+        {
+            string uniqueModel = string.IsNullOrWhiteSpace(targetUniqueCameraModel) ? "Fujifilm X-T5" : targetUniqueCameraModel.Trim();
+            string model = uniqueModel.StartsWith("Fujifilm ", StringComparison.OrdinalIgnoreCase)
+                ? uniqueModel.Substring("Fujifilm ".Length).Trim()
+                : uniqueModel;
+            if (string.IsNullOrWhiteSpace(model))
+            {
+                model = "X-T5";
+            }
+
+            string safeModel = model.Replace("\"", string.Empty);
+            string safeUniqueModel = uniqueModel.Replace("\"", string.Empty);
+            return $"-CameraProfilesMake=\"FUJIFILM\" -CameraProfilesModel=\"{safeModel}\" -CameraProfilesUniqueCameraModel=\"{safeUniqueModel}\" -CameraProfilesCameraRawProfile=\"True\" -UniqueCameraModel=\"{safeUniqueModel}\"";
+        }
+
         private readonly IProcessRunner _processRunner;
 
         public MetadataService(IProcessRunner? processRunner = null)
@@ -201,7 +216,7 @@ namespace Fujify.Services
                 var runner = FindExifToolRunner();
                 if (runner != null)
                 {
-                    var exifToolResult = InjectMetadataWithExifTool(runner.Value, dngFilePath, outputFolder, createBackup, isOriginallyDng, customOutputFilePath);
+                    var exifToolResult = InjectMetadataWithExifTool(runner.Value, dngFilePath, outputFolder, createBackup, isOriginallyDng, customOutputFilePath, targetUniqueCameraModel);
                     if (exifToolResult.Success)
                     {
                         return exifToolResult;
@@ -231,7 +246,7 @@ namespace Fujify.Services
                 var runner = FindExifToolRunner();
                 if (runner != null)
                 {
-                    return InjectMetadataWithExifTool(runner.Value, dngFilePath, outputFolder, createBackup, isOriginallyDng, customOutputFilePath);
+                    return InjectMetadataWithExifTool(runner.Value, dngFilePath, outputFolder, createBackup, isOriginallyDng, customOutputFilePath, targetUniqueCameraModel);
                 }
             }
 
@@ -246,7 +261,7 @@ namespace Fujify.Services
                 var runner = FindExifToolRunner();
                 if (runner != null)
                 {
-                    var exifToolResult = await InjectMetadataWithExifToolAsync(runner.Value, dngFilePath, outputFolder, createBackup, isOriginallyDng, customOutputFilePath, cancellationToken);
+                    var exifToolResult = await InjectMetadataWithExifToolAsync(runner.Value, dngFilePath, outputFolder, createBackup, isOriginallyDng, customOutputFilePath, targetUniqueCameraModel, cancellationToken);
                     if (exifToolResult.Success)
                     {
                         return exifToolResult;
@@ -277,7 +292,7 @@ namespace Fujify.Services
                 var runner = FindExifToolRunner();
                 if (runner != null)
                 {
-                    return await InjectMetadataWithExifToolAsync(runner.Value, dngFilePath, outputFolder, createBackup, isOriginallyDng, customOutputFilePath, cancellationToken);
+                    return await InjectMetadataWithExifToolAsync(runner.Value, dngFilePath, outputFolder, createBackup, isOriginallyDng, customOutputFilePath, targetUniqueCameraModel, cancellationToken);
                 }
             }
 
@@ -290,9 +305,10 @@ namespace Fujify.Services
             string? outputFolder,
             bool createBackup,
             bool isOriginallyDng,
-            string? customOutputFilePath)
+            string? customOutputFilePath,
+            string targetUniqueCameraModel)
         {
-            string baseArguments = CommonArgs;
+            string baseArguments = BuildExifToolProfileArgs(targetUniqueCameraModel);
             bool useOutputPath = (!string.IsNullOrEmpty(outputFolder) || !string.IsNullOrEmpty(customOutputFilePath))
                 && !string.Equals(dngFilePath, customOutputFilePath, StringComparison.OrdinalIgnoreCase);
             string? outputFilePath = null;
@@ -386,9 +402,10 @@ namespace Fujify.Services
             bool createBackup,
             bool isOriginallyDng,
             string? customOutputFilePath,
+            string targetUniqueCameraModel,
             CancellationToken cancellationToken)
         {
-            string baseArguments = CommonArgs;
+            string baseArguments = BuildExifToolProfileArgs(targetUniqueCameraModel);
             bool useOutputPath = (!string.IsNullOrEmpty(outputFolder) || !string.IsNullOrEmpty(customOutputFilePath))
                 && !string.Equals(dngFilePath, customOutputFilePath, StringComparison.OrdinalIgnoreCase);
             string? outputFilePath = null;

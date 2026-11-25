@@ -37,6 +37,7 @@ namespace Fujify.Services
             NumberHandling = JsonNumberHandling.AllowReadingFromString
         };
 
+        private readonly object _ioLock = new();
         private readonly string _settingsFilePath;
         private AppSettings _settings;
 
@@ -166,6 +167,14 @@ namespace Fujify.Services
 
         public void Load()
         {
+            lock (_ioLock)
+            {
+                LoadInternal();
+            }
+        }
+
+        private void LoadInternal()
+        {
             AppSettings? loadedSettings = null;
             string? loadedSourcePath = null;
             bool primaryFileWasCorrupt = false;
@@ -242,6 +251,15 @@ namespace Fujify.Services
 
         public void Save()
         {
+            lock (_ioLock)
+            {
+                SaveInternal();
+            }
+        }
+
+        private void SaveInternal()
+        {
+            string tempPath = _settingsFilePath + ".tmp";
             try
             {
                 string json = JsonSerializer.Serialize(_settings, SerializerOptions);
@@ -251,7 +269,6 @@ namespace Fujify.Services
                     Directory.CreateDirectory(primaryDir);
                 }
 
-                string tempPath = _settingsFilePath + ".tmp";
                 string bakPath = _settingsFilePath + ".bak";
 
                 // 1. Atomic write to temporary file
@@ -273,6 +290,7 @@ namespace Fujify.Services
 
                 // 3. Atomically commit temp file to primary settings file
                 File.Move(tempPath, _settingsFilePath, overwrite: true);
+                RestrictFilePermissionsIfUnix(_settingsFilePath);
 
                 // If custom path (e.g. unit tests in temp directory), do not touch user directories
                 bool isCustomTestPath = !string.IsNullOrEmpty(primaryDir) &&
@@ -280,6 +298,9 @@ namespace Fujify.Services
 
                 if (!isCustomTestPath)
                 {
+                    // Strip transient OAuth bearer tokens from secondary backup mirrors
+                    string mirrorJson = CreateRedactedMirrorJson(json);
+
                     // 4. Mirror to LocalApplicationData
                     try
                     {
@@ -288,7 +309,9 @@ namespace Fujify.Services
                         {
                             string localDir = Path.Combine(localApp, "Fujifier");
                             Directory.CreateDirectory(localDir);
-                            File.WriteAllText(Path.Combine(localDir, "settings.json"), json);
+                            string localPath = Path.Combine(localDir, "settings.json");
+                            File.WriteAllText(localPath, mirrorJson);
+                            RestrictFilePermissionsIfUnix(localPath);
                         }
                     }
                     catch { }
@@ -301,7 +324,9 @@ namespace Fujify.Services
                         {
                             string userDir = Path.Combine(userProfile, ".fujifier");
                             Directory.CreateDirectory(userDir);
-                            File.WriteAllText(Path.Combine(userDir, "settings.json"), json);
+                            string userPath = Path.Combine(userDir, "settings.json");
+                            File.WriteAllText(userPath, mirrorJson);
+                            RestrictFilePermissionsIfUnix(userPath);
                         }
                     }
                     catch { }
@@ -310,7 +335,35 @@ namespace Fujify.Services
             catch (Exception ex)
             {
                 Debug.WriteLine($"[SettingsService] Failed to save settings: {ex.Message}");
+                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
             }
+        }
+
+        private static string CreateRedactedMirrorJson(string json)
+        {
+            try
+            {
+                var clone = JsonSerializer.Deserialize<AppSettings>(json, SerializerOptions);
+                if (clone != null)
+                {
+                    clone.AccessToken = null;
+                    clone.RefreshToken = null;
+                    clone.OfflineToken = null;
+                    return JsonSerializer.Serialize(clone, SerializerOptions);
+                }
+            }
+            catch { }
+            return json;
+        }
+
+        private static void RestrictFilePermissionsIfUnix(string filePath)
+        {
+            if (OperatingSystem.IsWindows()) return;
+            try
+            {
+                File.SetUnixFileMode(filePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+            catch { }
         }
     }
 }

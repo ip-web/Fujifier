@@ -218,8 +218,18 @@ namespace Fujify.Services
             )
         };
 
+        private static string EscapeXml(string? value) =>
+            System.Security.SecurityElement.Escape(value ?? string.Empty) ?? string.Empty;
+
         public string GeneratePresetXml(LightroomPresetInfo preset)
         {
+            string uuid = EscapeXml(preset.Uuid);
+            string cameraProfile = EscapeXml(preset.CameraProfile);
+            string displayName = EscapeXml(preset.DisplayName);
+            string groupName = EscapeXml(PresetGroupName);
+            string lookName = EscapeXml(preset.LookName);
+            string lookUuid = EscapeXml(preset.LookUuid);
+
             var sb = new StringBuilder();
             sb.AppendLine("<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"Adobe XMP Core 7.0-c000 1.000000, 0000/00/00-00:00:00        \">");
             sb.AppendLine(" <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">");
@@ -227,7 +237,7 @@ namespace Fujify.Services
             sb.AppendLine("    xmlns:crs=\"http://ns.adobe.com/camera-raw-settings/1.0/\"");
             sb.AppendLine("   crs:PresetType=\"Normal\"");
             sb.AppendLine("   crs:Cluster=\"Fujifier\"");
-            sb.AppendLine($"   crs:UUID=\"{preset.Uuid}\"");
+            sb.AppendLine($"   crs:UUID=\"{uuid}\"");
             sb.AppendLine("   crs:SupportsAmount2=\"False\"");
             sb.AppendLine("   crs:SupportsAmount=\"False\"");
             sb.AppendLine("   crs:SupportsColor=\"True\"");
@@ -241,11 +251,11 @@ namespace Fujify.Services
             sb.AppendLine("   crs:ContactInfo=\"https://fujifier.cc\"");
             sb.AppendLine("   crs:Version=\"16.0\"");
             sb.AppendLine("   crs:ProcessVersion=\"15.4\"");
-            sb.AppendLine($"   crs:CameraProfile=\"{preset.CameraProfile}\"");
+            sb.AppendLine($"   crs:CameraProfile=\"{cameraProfile}\"");
             sb.AppendLine("   crs:HasSettings=\"True\">");
             sb.AppendLine("   <crs:Name>");
             sb.AppendLine("    <rdf:Alt>");
-            sb.AppendLine($"     <rdf:li xml:lang=\"x-default\">{preset.DisplayName}</rdf:li>");
+            sb.AppendLine($"     <rdf:li xml:lang=\"x-default\">{displayName}</rdf:li>");
             sb.AppendLine("    </rdf:Alt>");
             sb.AppendLine("   </crs:Name>");
             sb.AppendLine("   <crs:ShortName>");
@@ -260,12 +270,12 @@ namespace Fujify.Services
             sb.AppendLine("   </crs:SortName>");
             sb.AppendLine("   <crs:Group>");
             sb.AppendLine("    <rdf:Alt>");
-            sb.AppendLine($"     <rdf:li xml:lang=\"x-default\">{PresetGroupName}</rdf:li>");
+            sb.AppendLine($"     <rdf:li xml:lang=\"x-default\">{groupName}</rdf:li>");
             sb.AppendLine("    </rdf:Alt>");
             sb.AppendLine("   </crs:Group>");
             sb.AppendLine("   <crs:Description>");
             sb.AppendLine("    <rdf:Alt>");
-            sb.AppendLine($"     <rdf:li xml:lang=\"x-default\">Applies {preset.DisplayName} profile. Note: Photos must be converted with Fujifier beforehand.</rdf:li>");
+            sb.AppendLine($"     <rdf:li xml:lang=\"x-default\">Applies {displayName} profile. Note: Photos must be converted with Fujifier beforehand.</rdf:li>");
             sb.AppendLine("    </rdf:Alt>");
             sb.AppendLine("   </crs:Description>");
 
@@ -273,9 +283,9 @@ namespace Fujify.Services
             {
                 sb.AppendLine("   <crs:Look>");
                 sb.AppendLine("    <rdf:Description");
-                sb.AppendLine($"     crs:Name=\"{preset.LookName}\"");
+                sb.AppendLine($"     crs:Name=\"{lookName}\"");
                 sb.AppendLine("     crs:Amount=\"1\"");
-                sb.AppendLine($"     crs:UUID=\"{preset.LookUuid}\"");
+                sb.AppendLine($"     crs:UUID=\"{lookUuid}\"");
                 sb.AppendLine("     crs:SupportsAmount=\"False\"");
                 sb.AppendLine("     crs:Stubbed=\"true\">");
                 sb.AppendLine("     <crs:Group>");

@@ -388,7 +388,7 @@ namespace Fujify.ViewModels
         public bool IsMobile => OperatingSystem.IsAndroid() || OperatingSystem.IsIOS();
         public bool CanOpenInLightroom => IsOpenInLightroomSupported && IsLightroomModeSelected && HasRecentlyConvertedFiles && (IsBatchSummaryModal || ModalTitle == "Processing completed" || ModalTitle == LocalizationManager.Tr("BatchCompleteTitle"));
         public bool CanOpenInCaptureOne => IsOpenInCaptureOneSupported && IsCaptureOneModeSelected && HasBatchOutputFiles && (IsBatchSummaryModal || ModalTitle == "Processing completed" || ModalTitle == LocalizationManager.Tr("BatchCompleteTitle"));
-        public bool CanOpenOutputFolder => !OperatingSystem.IsIOS() && !OperatingSystem.IsAndroid() && HasBatchOutputFiles && (ModalTitle == "Processing completed" || IsBatchSummaryModal);
+        public bool CanOpenOutputFolder => !OperatingSystem.IsIOS() && !OperatingSystem.IsAndroid() && HasBatchOutputFiles && (IsBatchSummaryModal || ModalTitle == "Processing completed" || ModalTitle == LocalizationManager.Tr("BatchCompleteTitle"));
         public string OpenOutputFolderButtonClass => CanOpenInCaptureOne ? "secondary" : "primary";
         public bool IsAndroid => OperatingSystem.IsAndroid();
         public bool IsMobileSubtitleVisible => !OperatingSystem.IsAndroid();
@@ -1214,16 +1214,16 @@ namespace Fujify.ViewModels
                 }
                 if (IsProcessing)
                 {
-                    int done = Files.Count(f => f.Status == "✔" || (f.Status != null && f.Status != "Pending"));
+                    int done = Files.Count(f => f.IsCompleted || f.IsError || f.ProcessingState == FileProcessingState.Skipped || (f.Status != null && f.Status != "Pending"));
                     return LocalizationManager.TrFormat("ProcessingPhotoCount", Math.Min(done + 1, Files.Count), Files.Count);
                 }
                 if (!HasFiles)
                 {
                     return LocalizationManager.Tr("Ready");
                 }
-                int pendingCount = Files.Count(f => f.Status == "Pending");
-                int successCount = Files.Count(f => f.Status == "✔");
-                int errorCount = Files.Count(f => f.IsError || (f.Status != null && f.Status.StartsWith("Error", StringComparison.OrdinalIgnoreCase)));
+                int pendingCount = Files.Count(f => f.ProcessingState == FileProcessingState.Pending);
+                int successCount = Files.Count(f => f.IsCompleted);
+                int errorCount = Files.Count(f => f.IsError);
 
                 if (pendingCount == 0 && (successCount > 0 || errorCount > 0))
                 {
@@ -1252,9 +1252,9 @@ namespace Fujify.ViewModels
             {
                 if (IsProcessing) return "#31A8FF";
                 if (!HasFiles) return "#A5D5B7";
-                int pendingCount = Files.Count(f => f.Status == "Pending");
-                int errorCount = Files.Count(f => f.IsError || (f.Status != null && f.Status.StartsWith("Error", StringComparison.OrdinalIgnoreCase)));
-                int successCount = Files.Count(f => f.Status == "✔");
+                int pendingCount = Files.Count(f => f.ProcessingState == FileProcessingState.Pending);
+                int errorCount = Files.Count(f => f.IsError);
+                int successCount = Files.Count(f => f.IsCompleted);
 
                 if (pendingCount == 0 && (successCount > 0 || errorCount > 0))
                 {
@@ -2854,7 +2854,16 @@ namespace Fujify.ViewModels
 
             bool createBackup = IsMobile || CreateBackup;
             string? currentOutputFolder = IsMobile ? null : OutputFolderPath;
-            bool hasProcessingErrors = false;
+            int hasProcessingErrorsFlag = 0;
+
+            // Snapshot UI-bound file metadata before worker threads run (avoids cross-thread collection reads)
+            var fileMetadataSnapshot = Files
+                .Where(f => !string.IsNullOrEmpty(f.FilePath))
+                .GroupBy(f => f.FilePath, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    g => g.Key,
+                    g => (Camera: g.First().CameraMakeAndModel, Lens: g.First().Lens ?? string.Empty),
+                    StringComparer.OrdinalIgnoreCase);
 
             int totalFiles = files.Count;
             int configuredConcurrency = _settingsService.Settings.MaxConcurrentConversions;
@@ -2901,7 +2910,7 @@ namespace Fujify.ViewModels
                 {
                     ct.ThrowIfCancellationRequested();
 
-                    UpdateFileStatus(filePath, "Processing");
+                    UpdateFileStatus(filePath, "Processing", state: FileProcessingState.Processing);
 
                     try
                     {
@@ -2925,18 +2934,18 @@ namespace Fujify.ViewModels
                     }
                     catch (OperationCanceledException)
                     {
-                        UpdateFileStatus(filePath, "Pending");
+                        UpdateFileStatus(filePath, "Pending", state: FileProcessingState.Pending);
                         throw;
                     }
                     catch (Exception ex)
                     {
-                        UpdateFileStatus(filePath, $"Error: {ex.Message}", ex.ToString());
-                        hasProcessingErrors = true;
-                        var fileItem = Files.FirstOrDefault(f => string.Equals(f.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
-                        string camera = !string.IsNullOrWhiteSpace(fileItem?.CameraMakeAndModel)
-                            ? fileItem.CameraMakeAndModel
+                        UpdateFileStatus(filePath, $"Error: {ex.Message}", ex.ToString(), FileProcessingState.Error);
+                        Interlocked.Exchange(ref hasProcessingErrorsFlag, 1);
+                        fileMetadataSnapshot.TryGetValue(filePath, out var snap);
+                        string camera = !string.IsNullOrWhiteSpace(snap.Camera)
+                            ? snap.Camera
                             : (RawMetadataReader.TryGetCameraMakeAndModel(filePath) ?? "Unknown Camera");
-                        string lens = fileItem?.Lens ?? string.Empty;
+                        string lens = snap.Lens ?? string.Empty;
                         failedEntries.Add(new FailedConversionEntry(
                             filePath,
                             camera,
@@ -3010,6 +3019,7 @@ namespace Fujify.ViewModels
 
                 ProcessingCompleted?.Invoke();
 
+                bool hasProcessingErrors = Volatile.Read(ref hasProcessingErrorsFlag) != 0;
                 string message = hasProcessingErrors
                     ? "Processing completed with some errors. Please check the status for details."
                     : "Enjoy your new Film simulations!";
@@ -3172,23 +3182,8 @@ namespace Fujify.ViewModels
             }
         }
 
-        private static string GetUniqueFilePath(string filePath, HashSet<string>? reservedPaths = null)
-        {
-            string directory = Path.GetDirectoryName(filePath) ?? string.Empty;
-            string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(filePath);
-            string extension = Path.GetExtension(filePath);
-
-            int counter = 1;
-            string newFilePath;
-            do
-            {
-                newFilePath = Path.Combine(directory, $"{fileNameWithoutExtension} ({counter}){extension}");
-                counter++;
-            } while (File.Exists(newFilePath) || (reservedPaths != null && reservedPaths.Contains(newFilePath)));
-
-            reservedPaths?.Add(newFilePath);
-            return newFilePath;
-        }
+        private static string GetUniqueFilePath(string filePath, HashSet<string>? reservedPaths = null) =>
+            ConversionPipelineHelper.GetUniqueFilePath(filePath, reservedPaths);
 
         internal async Task<bool> ProcessSingleFileAsync(
             string filePath,
@@ -3295,7 +3290,7 @@ namespace Fujify.ViewModels
 
                 if (choice == ConflictChoice.Skip)
                 {
-                    UpdateFileStatus(filePath, "Skipped (Exists)");
+                    UpdateFileStatus(filePath, "Skipped (Exists)", state: FileProcessingState.Skipped);
                     lock (_recentlyConvertedDngFiles)
                     {
                         _batchExistingSkippedFiles.Add(initialDestFilePath);
@@ -3325,138 +3320,30 @@ namespace Fujify.ViewModels
                 }
             }
 
-            if (isCaptureOneMode)
+            try
             {
-                // If the input file is ALREADY a Fujifilm RAF file, bypass full conversion/repacking
-                if (filePath.EndsWith(".raf", StringComparison.OrdinalIgnoreCase))
-                {
-                    bool isBayer = _rafConverterService.IsBayerSensor(filePath);
-                    string targetModel = isBayer ? "GFX50S II" : "X-T5";
-                    string statusMsg = isBayer ? "Bayer RAF → GFX50S II" : "X-Trans RAF → X-T5";
-                    UpdateFileStatus(filePath, statusMsg);
+                var request = new SingleConversionRequest(
+                    SourceFilePath: filePath,
+                    FinalDestFilePath: finalDestFilePath,
+                    OutputFolder: outputFolder,
+                    CreateBackup: createBackup,
+                    EmbedOriginalRaw: _settingsService.Settings.EmbedOriginalRaw,
+                    LosslessCompression: _licenseService.IsPro && _settingsService.Settings.LosslessCompression,
+                    VerifyFileIntegrity: _settingsService.Settings.VerifyFileIntegrity,
+                    IsCaptureOneMode: isCaptureOneMode,
+                    RafContainerPath: _settingsService.Settings.RafContainerPath,
+                    TargetUniqueCameraModel: TargetCameraModel,
+                    StatusCallback: s => UpdateFileStatus(filePath, s, state: FileProcessingState.Processing));
 
-                    string? patchDestDir = Path.GetDirectoryName(finalDestFilePath);
-                    if (!string.IsNullOrEmpty(patchDestDir) && !Directory.Exists(patchDestDir))
-                    {
-                        Directory.CreateDirectory(patchDestDir);
-                    }
-
-                    string sourceForPatch = filePath;
-                    if (isExactSameFilePath && createBackup && isSameFolder)
-                    {
-                        string origBaseName = Path.GetFileNameWithoutExtension(filePath);
-                        string origBackup = Path.Combine(inputDir, $"{origBaseName}ORIG.RAF");
-                        if (File.Exists(origBackup)) File.Delete(origBackup);
-                        File.Move(filePath, origBackup);
-                        sourceForPatch = origBackup;
-                    }
-
-                    var patchResult = await _rafConverterService.PatchModelAsync(
-                        sourceForPatch,
-                        finalDestFilePath,
-                        targetModel,
-                        ct);
-
-                    if (!patchResult.Success)
-                    {
-                        string err = patchResult.ErrorMessage ?? "RAF model patch failed";
-                        UpdateFileStatus(filePath, err);
-                        throw new InvalidOperationException(err);
-                    }
-
-                    if (_settingsService.Settings.VerifyFileIntegrity)
-                    {
-                        UpdateFileStatus(filePath, "Verifying file integrity");
-                        var integrity = await _fileIntegrityService.VerifyIntegrityAsync(finalDestFilePath, ct);
-                        if (!integrity.IsValid)
-                        {
-                            string err = $"File integrity check failed: {integrity.ErrorMessage}";
-                            UpdateFileStatus(filePath, err);
-                            if (File.Exists(finalDestFilePath) && !string.Equals(Path.GetFullPath(sourceForPatch), Path.GetFullPath(finalDestFilePath), StringComparison.OrdinalIgnoreCase))
-                            {
-                                try { File.Delete(finalDestFilePath); } catch { }
-                            }
-                            if (isExactSameFilePath && createBackup && isSameFolder && File.Exists(sourceForPatch) && !File.Exists(filePath))
-                            {
-                                try { File.Move(sourceForPatch, filePath); } catch { }
-                            }
-                            throw new InvalidOperationException(err);
-                        }
-                    }
-
-                    if (!createBackup && !string.Equals(Path.GetFullPath(sourceForPatch), Path.GetFullPath(finalDestFilePath), StringComparison.OrdinalIgnoreCase))
-                    {
-                        FileTrashHelper.SendToTrash(sourceForPatch);
-                    }
-
-                    UpdateFileStatus(filePath, "✔");
-                    lock (_recentlyConvertedDngFiles)
-                    {
-                        _recentlyConvertedDngFiles.Add(finalDestFilePath);
-                    }
-                    PlatformFileCreatedCallback?.Invoke(finalDestFilePath);
-                    return true;
-                }
-
-                string? containerPath = _settingsService.Settings.RafContainerPath;
-                string resolvedContainer = _rafConverterService.ResolveContainerArgument(containerPath);
-                if (string.IsNullOrWhiteSpace(resolvedContainer) || !_rafConverterService.HasValidContainer(resolvedContainer))
-                {
-                    string err = LocalizationManager.Tr("MissingRafContainerError");
-                    UpdateFileStatus(filePath, err);
-                    throw new InvalidOperationException(err);
-                }
-
-                string? destDir = Path.GetDirectoryName(finalDestFilePath);
-                if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
-                {
-                    try
-                    {
-                        Directory.CreateDirectory(destDir);
-                    }
-                    catch (Exception ex)
-                    {
-                        throw new UnauthorizedAccessException($"Cannot create output directory '{destDir}': {ex.Message}.", ex);
-                    }
-                }
-
-                UpdateFileStatus(filePath, LocalizationManager.Tr("ConvertingToRaf"));
-                var convResult = await _rafConverterService.ConvertToRafAsync(
-                    filePath,
-                    finalDestFilePath,
-                    resolvedContainer,
-                    null,
+                await ConversionPipelineHelper.ExecuteSingleConversionAsync(
+                    request,
+                    _rawConverterService,
+                    _rafConverterService,
+                    _metadataService,
+                    _fileIntegrityService,
                     ct);
 
-                if (!convResult.Success || string.IsNullOrEmpty(convResult.OutputRafPath))
-                {
-                    string err = convResult.ErrorMessage ?? "Conversion to RAF failed";
-                    UpdateFileStatus(filePath, err);
-                    throw new InvalidOperationException(err);
-                }
-
-                if (_settingsService.Settings.VerifyFileIntegrity)
-                {
-                    UpdateFileStatus(filePath, "Verifying file integrity");
-                    var integrity = await _fileIntegrityService.VerifyIntegrityAsync(finalDestFilePath, ct);
-                    if (!integrity.IsValid)
-                    {
-                        string err = $"File integrity check failed: {integrity.ErrorMessage}";
-                        UpdateFileStatus(filePath, err);
-                        if (File.Exists(finalDestFilePath) && !string.Equals(Path.GetFullPath(filePath), Path.GetFullPath(finalDestFilePath), StringComparison.OrdinalIgnoreCase))
-                        {
-                            try { File.Delete(finalDestFilePath); } catch { }
-                        }
-                        throw new InvalidOperationException(err);
-                    }
-                }
-
-                if (!createBackup)
-                {
-                    FileTrashHelper.SendToTrash(filePath);
-                }
-
-                UpdateFileStatus(filePath, "✔");
+                UpdateFileStatus(filePath, "✔", state: FileProcessingState.Completed);
                 lock (_recentlyConvertedDngFiles)
                 {
                     _recentlyConvertedDngFiles.Add(finalDestFilePath);
@@ -3464,223 +3351,36 @@ namespace Fujify.ViewModels
                 PlatformFileCreatedCallback?.Invoke(finalDestFilePath);
                 return true;
             }
-
-            string? dngFilePath = filePath;
-            string? tempInPlaceOutputFile = null;
-            string? origBackupPath = null;
-
-            if (isOriginallyDng)
+            catch (OperationCanceledException)
             {
-                if (createBackup && isSameFolder)
-                {
-                    // If the file is already a DNG and the output folder is the same as the input,
-                    // change the name of the original file to filenameORIG.DNG
-                    string origBaseName = Path.GetFileNameWithoutExtension(filePath);
-                    origBackupPath = Path.Combine(inputDir, $"{origBaseName}ORIG.DNG");
-                    if (File.Exists(origBackupPath))
-                    {
-                        File.Delete(origBackupPath);
-                    }
-                    File.Move(filePath, origBackupPath);
-                    dngFilePath = origBackupPath;
-                }
-                else if (!createBackup && isExactSameFilePath)
-                {
-                    // Write to a temporary file first so the original can be safely sent to trash upon success
-                    string origBaseName = Path.GetFileNameWithoutExtension(filePath);
-                    tempInPlaceOutputFile = Path.Combine(outputDir, $"{origBaseName}_tmp_{Guid.NewGuid():N}.dng");
-                }
+                UpdateFileStatus(filePath, "Pending", state: FileProcessingState.Pending);
+                throw;
             }
-
-            try
+            catch (Exception ex)
             {
-                if (!isOriginallyDng)
-                {
-                    UpdateFileStatus(filePath, "Converting to DNG");
-                    bool embedOriginalRaw = _settingsService.Settings.EmbedOriginalRaw;
-
-                    // Ensure target output directory exists before conversion
-                    string? targetDir = Path.GetDirectoryName(finalDestFilePath);
-                    if (!string.IsNullOrEmpty(targetDir) && !Directory.Exists(targetDir))
-                    {
-                        try
-                        {
-                            Directory.CreateDirectory(targetDir);
-                        }
-                        catch (Exception ex)
-                        {
-                            if (OperatingSystem.IsAndroid())
-                            {
-                                DialogService.PlatformEnsurePermissionsCallback?.Invoke();
-                            }
-                            throw new UnauthorizedAccessException($"Cannot create output directory '{targetDir}': {ex.Message}.", ex);
-                        }
-                    }
-
-                    // Directly convert into the final destination path without intermediate source-dir temp files
-                    string targetDngForConversion = finalDestFilePath;
-
-                    bool useLossless = _licenseService.IsPro && _settingsService.Settings.LosslessCompression;
-                    ct.ThrowIfCancellationRequested();
-                    var convResult = _rawConverterService.ConvertToDng(
-                        filePath,
-                        embedOriginalRaw,
-                        targetDngForConversion,
-                        useLossless);
-                    if (!convResult.Success || string.IsNullOrEmpty(convResult.OutputDngPath))
-                    {
-                        string err = convResult.ErrorMessage ?? "Conversion failed";
-                        UpdateFileStatus(filePath, err);
-                        throw new InvalidOperationException(err);
-                    }
-
-                    dngFilePath = convResult.OutputDngPath;
-                    UpdateFileStatus(filePath, "Conversion successful");
-                }
-
-                string? customOutputPath = tempInPlaceOutputFile ?? ((!string.IsNullOrEmpty(outputFolder) || finalDestFilePath != dngFilePath)
-                    ? finalDestFilePath
-                    : null);
-
-                if (!string.IsNullOrEmpty(customOutputPath))
-                {
-                    string? destDir = Path.GetDirectoryName(customOutputPath);
-                    if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
-                    {
-                        try
-                        {
-                            Directory.CreateDirectory(destDir);
-                        }
-                        catch (Exception ex)
-                        {
-                            if (OperatingSystem.IsAndroid())
-                            {
-                                DialogService.PlatformEnsurePermissionsCallback?.Invoke();
-                            }
-                            throw new UnauthorizedAccessException($"Cannot create output directory '{destDir}': {ex.Message}.", ex);
-                        }
-                    }
-                }
-
-                ct.ThrowIfCancellationRequested();
-                var metaResult = _metadataService.InjectFujifilmMetadata(
-                    dngFilePath,
-                    outputFolder,
-                    createBackup: false,
-                    isOriginallyDng: isOriginallyDng,
-                    customOutputFilePath: customOutputPath,
-                    targetUniqueCameraModel: TargetCameraModel,
-                    sourceRawFilePath: filePath);
-
-                if (metaResult.Success)
-                {
-                    string targetToVerify = !string.IsNullOrEmpty(tempInPlaceOutputFile)
-                        ? tempInPlaceOutputFile
-                        : finalDestFilePath;
-
-                    if (_settingsService.Settings.VerifyFileIntegrity)
-                    {
-                        UpdateFileStatus(filePath, "Verifying file integrity");
-                        var integrity = await _fileIntegrityService.VerifyIntegrityAsync(targetToVerify, ct);
-                        if (!integrity.IsValid)
-                        {
-                            string err = $"File integrity check failed: {integrity.ErrorMessage}";
-                            UpdateFileStatus(filePath, err);
-                            if (!string.IsNullOrEmpty(tempInPlaceOutputFile) && File.Exists(tempInPlaceOutputFile))
-                            {
-                                try { File.Delete(tempInPlaceOutputFile); } catch { }
-                            }
-                            if (!isOriginallyDng && !string.IsNullOrEmpty(finalDestFilePath) && File.Exists(finalDestFilePath))
-                            {
-                                try { File.Delete(finalDestFilePath); } catch { }
-                            }
-                            if (isOriginallyDng && createBackup && isSameFolder && !string.IsNullOrEmpty(origBackupPath) && File.Exists(origBackupPath) && !File.Exists(filePath))
-                            {
-                                try { File.Move(origBackupPath, filePath); } catch { }
-                            }
-                            throw new InvalidOperationException(err);
-                        }
-                    }
-
-                    if (!string.IsNullOrEmpty(tempInPlaceOutputFile))
-                    {
-                        // Original in-place DNG: send original to trash, then move temporary file to final path
-                        FileTrashHelper.SendToTrash(filePath);
-                        File.Move(tempInPlaceOutputFile, finalDestFilePath, overwrite: true);
-                    }
-                    else if (!createBackup)
-                    {
-                        // If backup is deactivated, send original file to trash for all files that succeeded
-                        FileTrashHelper.SendToTrash(filePath);
-
-                        // Also trash original sidecar if it was copied or embedded and differs from the final output sidecar
-                        string? origSidecar = DngMetadataEditor.FindSidecarXmp(filePath);
-                        if (!string.IsNullOrEmpty(origSidecar) && File.Exists(origSidecar))
-                        {
-                            string targetSidecar = Path.ChangeExtension(finalDestFilePath, ".xmp");
-                            if (!string.Equals(Path.GetFullPath(origSidecar), Path.GetFullPath(targetSidecar), StringComparison.OrdinalIgnoreCase))
-                            {
-                                FileTrashHelper.SendToTrash(origSidecar);
-                            }
-                        }
-                    }
-
-                    UpdateFileStatus(filePath, "✔");
-                    lock (_recentlyConvertedDngFiles)
-                    {
-                        _recentlyConvertedDngFiles.Add(finalDestFilePath);
-                    }
-                    PlatformFileCreatedCallback?.Invoke(finalDestFilePath);
-                    return true;
-                }
-                else
-                {
-                    if (!isOriginallyDng && !string.IsNullOrEmpty(finalDestFilePath) && File.Exists(finalDestFilePath))
-                    {
-                        try { File.Delete(finalDestFilePath); } catch { }
-                    }
-                    if (!string.IsNullOrEmpty(tempInPlaceOutputFile) && File.Exists(tempInPlaceOutputFile))
-                    {
-                        try { File.Delete(tempInPlaceOutputFile); } catch { }
-                    }
-                    if (isOriginallyDng && createBackup && isSameFolder && !string.IsNullOrEmpty(origBackupPath) && File.Exists(origBackupPath) && !File.Exists(filePath))
-                    {
-                        try { File.Move(origBackupPath, filePath); } catch { }
-                    }
-                    string err = metaResult.ErrorMessage ?? "Error writing metadata";
-                    UpdateFileStatus(filePath, err);
-                    throw new InvalidOperationException(err);
-                }
-            }
-            catch
-            {
-                if (!isOriginallyDng && !string.IsNullOrEmpty(finalDestFilePath) && File.Exists(finalDestFilePath))
-                {
-                    try { File.Delete(finalDestFilePath); } catch { }
-                }
-                if (!string.IsNullOrEmpty(tempInPlaceOutputFile) && File.Exists(tempInPlaceOutputFile))
-                {
-                    try { File.Delete(tempInPlaceOutputFile); } catch { }
-                }
-                if (isOriginallyDng && createBackup && isSameFolder && !string.IsNullOrEmpty(origBackupPath) && File.Exists(origBackupPath) && !File.Exists(filePath))
-                {
-                    try { File.Move(origBackupPath, filePath); } catch { }
-                }
+                UpdateFileStatus(filePath, ex.Message, state: FileProcessingState.Error);
                 throw;
             }
         }
 
-        public void UpdateFileStatus(string filePath, string status, string? errorMessage = null)
+        public void UpdateFileStatus(string filePath, string status, string? errorMessage = null, FileProcessingState? state = null)
         {
             Dispatcher.UIThread.Post(() =>
             {
                 var fileItem = Files.FirstOrDefault(f => string.Equals(f.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
                 if (fileItem != null)
                 {
-                    fileItem.Status = status;
-                    if (!string.IsNullOrEmpty(errorMessage))
+                    if (state.HasValue)
                     {
-                        fileItem.ErrorMessage = errorMessage;
+                        fileItem.SetStatus(status, state.Value, errorMessage);
+                    }
+                    else
+                    {
+                        fileItem.Status = status;
+                        if (!string.IsNullOrEmpty(errorMessage))
+                        {
+                            fileItem.ErrorMessage = errorMessage;
+                        }
                     }
                     OnPropertyChanged(nameof(CanProcess));
                     OnPropertyChanged(nameof(CanProcessOrStop));

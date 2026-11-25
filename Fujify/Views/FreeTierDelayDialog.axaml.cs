@@ -184,9 +184,10 @@ namespace Fujify.Views
                     ContinueButton.Content = "Start Using Fujifier Pro";
                     ContinueButton.Classes.Add("accent");
                     CountdownProgressBar.Value = _licenseService.DelaySeconds;
-                    CountdownStatusText.Text = "License active.";
+                    CountdownStatusText.Text = Localization.LocalizationManager.Tr("ProLicenseActive");
                     LicenseKeySection.IsVisible = false;
                     ToggleKeyButton.IsVisible = false;
+                    GoogleSignInButton.IsVisible = false;
                 }
                 else
                 {

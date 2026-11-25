@@ -181,12 +181,14 @@ public class AdManager
                 {
                     Log.Warn("FujifierAds", $"Failed to load Splash App Open Ad ({adUnitId}): {err.Message} (Code: {err.Code})");
 
-                    // If production unit failed with NO_FILL (Code 3) or other error, fallback to Google Test Unit
+#if DEBUG
+                    // Fallback to Google Test Unit only in Debug builds
                     if (adUnitId != TestSplashAppOpenUnitId)
                     {
                         Log.Info("FujifierAds", "Falling back to Google Test Splash App Open Unit...");
                         _activity?.RunOnUiThread(() => LoadAndShowSplashInternal(TestSplashAppOpenUnitId));
                     }
+#endif
                 });
 
             AppOpenAd.Load(_activity, adUnitId, adRequest, _appOpenCallback);
@@ -252,12 +254,14 @@ public class AdManager
                     _interstitialAd = null;
                     Log.Warn("FujifierAds", $"Failed to preload Interstitial Ad ({adUnitId}): {err.Message} (Code: {err.Code})");
 
-                    // Fallback to Test Interstitial if production had no fill
+#if DEBUG
+                    // Fallback to Test Interstitial only in Debug builds
                     if (adUnitId != TestInterstitialUnitId)
                     {
                         Log.Info("FujifierAds", "Falling back to Google Test Interstitial Unit...");
                         _activity?.RunOnUiThread(() => PreloadInterstitialInternal(TestInterstitialUnitId));
                     }
+#endif
                 });
 
             InterstitialAd.Load(_activity, adUnitId, adRequest, _interstitialCallback);
@@ -368,12 +372,14 @@ public class AdManager
                 {
                     Log.Warn("FujifierAds", $"Banner Ad failed to load ({adUnitId}): {err.Message} (Code: {err.Code})");
 
-                    // Fallback to Google Test Banner Unit if production has no fill
+#if DEBUG
+                    // Fallback to Google Test Banner Unit only in Debug builds
                     if (adUnitId != TestBannerUnitId)
                     {
                         Log.Info("FujifierAds", "Falling back to Google Test Banner Unit...");
                         _activity?.RunOnUiThread(() => LoadBannerInternal(TestBannerUnitId));
                     }
+#endif
                 });
 
             adView.AdListener = _bannerListener;

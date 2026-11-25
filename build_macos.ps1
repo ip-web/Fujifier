@@ -44,9 +44,9 @@ $infoPlist = @"
     <key>CFBundleIdentifier</key>
     <string>dev.ipweb.fujifier</string>
     <key>CFBundleVersion</key>
-    <string>2.2.0</string>
+    <string>2.2.1</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.2.0</string>
+    <string>2.2.1</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
@@ -161,7 +161,7 @@ if ($repoQuickActions) {
 }
 
 # Archive macOS Apple Silicon
-$macArmArchive = Join-Path $releaseDir "Fujifier-v2.2.0-macOS-AppleSilicon.zip"
+$macArmArchive = Join-Path $releaseDir "Fujifier-v2.2.1-macOS-AppleSilicon.zip"
 if (Test-Path $macArmArchive) { Remove-Item -Force $macArmArchive }
 & tar -a -cf $macArmArchive -C $distDir "Fujifier.app"
 Write-Host " Created macOS Apple Silicon Archive: $macArmArchive" -ForegroundColor Green
@@ -249,7 +249,7 @@ if ($repoQuickActions) {
 }
 
 # Archive macOS Intel
-$macIntelArchive = Join-Path $releaseDir "Fujifier-v2.2.0-macOS-Intel.zip"
+$macIntelArchive = Join-Path $releaseDir "Fujifier-v2.2.1-macOS-Intel.zip"
 if (Test-Path $macIntelArchive) { Remove-Item -Force $macIntelArchive }
 & tar -a -cf $macIntelArchive -C $distDir "Fujifier-Intel.app"
 Write-Host " Created macOS Intel Archive: $macIntelArchive" -ForegroundColor Green

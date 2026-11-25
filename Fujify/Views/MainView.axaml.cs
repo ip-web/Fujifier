@@ -41,6 +41,17 @@ namespace Fujify.Views
         private double _keyboardHeight = 0;
         private Avalonia.Thickness _lastInsets = new Avalonia.Thickness(0, 47, 0, 24);
 
+        private Avalonia.Controls.Platform.IInsetsManager? _attachedInsetsManager;
+        private EventHandler<Avalonia.Controls.Platform.SafeAreaChangedArgs>? _safeAreaChangedHandler;
+        private Avalonia.Controls.Platform.IInputPane? _attachedInputPane;
+        private EventHandler<Avalonia.Controls.Platform.InputPaneStateEventArgs>? _inputPaneStateChangedHandler;
+        private Action<bool>? _bannerVisibilityChangedHandler;
+        private EventHandler<Fujify.Services.LicenseStatus>? _licenseChangedHandler;
+        private Window? _attachedWindow;
+        private EventHandler? _windowActivatedHandler;
+        private EventHandler? _windowDeactivatedHandler;
+        private EventHandler<AvaloniaPropertyChangedEventArgs>? _windowPropertyChangedHandler;
+
         public MainView()
         {
             InitializeComponent();
@@ -58,6 +69,8 @@ namespace Fujify.Views
         protected override void OnAttachedToVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
         {
             base.OnAttachedToVisualTree(e);
+            DetachTrackedHandlers();
+
             _prefPanel = this.FindControl<Grid>("PreferencesSlidePanel");
             _aboutPanel = this.FindControl<Grid>("AboutSlidePanel");
 
@@ -70,14 +83,16 @@ namespace Fujify.Views
                 if (topLevel.InsetsManager != null)
                 {
                     var mgr = topLevel.InsetsManager;
+                    _attachedInsetsManager = mgr;
                     mgr.DisplayEdgeToEdgePreference = true;
                     _lastInsets = mgr.SafeAreaPadding;
                     ApplySafeArea(_lastInsets);
-                    mgr.SafeAreaChanged += (s, args) =>
+                    _safeAreaChangedHandler = (s, args) =>
                     {
                         _lastInsets = args.SafeAreaPadding;
                         ApplySafeArea(_lastInsets);
                     };
+                    mgr.SafeAreaChanged += _safeAreaChangedHandler;
                 }
                 else
                 {
@@ -87,7 +102,8 @@ namespace Fujify.Views
 
                 if (topLevel.InputPane != null)
                 {
-                    topLevel.InputPane.StateChanged += (s, args) =>
+                    _attachedInputPane = topLevel.InputPane;
+                    _inputPaneStateChangedHandler = (s, args) =>
                     {
                         _keyboardHeight = args.EndRect.Height;
                         ApplySafeArea(_lastInsets);
@@ -103,28 +119,22 @@ namespace Fujify.Views
                             }, Avalonia.Threading.DispatcherPriority.Background);
                         }
                     };
+                    topLevel.InputPane.StateChanged += _inputPaneStateChangedHandler;
                 }
 
-                AddHandler(InputElement.GotFocusEvent, (s, e) =>
-                {
-                    if (e.Source is Avalonia.Visual visual)
-                    {
-                        var target = visual.FindAncestorOfType<TextBox>() ?? (visual as Control);
-                        if (target != null)
-                        {
-                            BringControlIntoView(target);
-                        }
-                    }
-                }, RoutingStrategies.Bubble);
+                AddHandler(InputElement.GotFocusEvent, OnMobileGotFocus, RoutingStrategies.Bubble);
 
-                Fujify.Services.AdService.BannerVisibilityChanged += (visible) =>
+                _bannerVisibilityChangedHandler = (visible) =>
                 {
                     Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplySafeArea(_lastInsets));
                 };
-                Fujify.Services.LicenseService.AnyLicenseChanged += (s, status) =>
+                Fujify.Services.AdService.BannerVisibilityChanged += _bannerVisibilityChangedHandler;
+
+                _licenseChangedHandler = (s, status) =>
                 {
                     Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplySafeArea(_lastInsets));
                 };
+                Fujify.Services.LicenseService.AnyLicenseChanged += _licenseChangedHandler;
             }
 
             UpdateSlidePanels(animated: false);
@@ -134,28 +144,93 @@ namespace Fujify.Views
 
             if (VisualRoot is Window window)
             {
-                window.Activated += (ws, wargs) =>
+                _attachedWindow = window;
+                _windowActivatedHandler = (ws, wargs) =>
                 {
                     if (DataContext is MainViewModel vm) vm.IsWindowActive = true;
                 };
-                window.Deactivated += (ws, wargs) =>
+                _windowDeactivatedHandler = (ws, wargs) =>
                 {
                     if (DataContext is MainViewModel vm) vm.IsWindowActive = false;
                 };
-                if (DataContext is MainViewModel vmAttached)
-                {
-                    vmAttached.IsWindowActive = window.IsActive;
-                }
-
-                window.PropertyChanged += (ws, wargs) =>
+                _windowPropertyChangedHandler = (ws, wargs) =>
                 {
                     if (wargs.Property == Window.WindowStateProperty)
                     {
                         UpdateMaximizeButtonGlyph(window.WindowState == WindowState.Maximized);
                     }
                 };
+
+                window.Activated += _windowActivatedHandler;
+                window.Deactivated += _windowDeactivatedHandler;
+                window.PropertyChanged += _windowPropertyChangedHandler;
+
+                if (DataContext is MainViewModel vmAttached)
+                {
+                    vmAttached.IsWindowActive = window.IsActive;
+                }
                 UpdateMaximizeButtonGlyph(window.WindowState == WindowState.Maximized);
             }
+        }
+
+        protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
+        {
+            base.OnDetachedFromVisualTree(e);
+            DetachTrackedHandlers();
+        }
+
+        private void OnMobileGotFocus(object? sender, RoutedEventArgs e)
+        {
+            if (e.Source is Avalonia.Visual visual)
+            {
+                var target = visual.FindAncestorOfType<TextBox>() ?? (visual as Control);
+                if (target != null)
+                {
+                    BringControlIntoView(target);
+                }
+            }
+        }
+
+        private void DetachTrackedHandlers()
+        {
+            if (_attachedInsetsManager != null && _safeAreaChangedHandler != null)
+            {
+                _attachedInsetsManager.SafeAreaChanged -= _safeAreaChangedHandler;
+            }
+            _attachedInsetsManager = null;
+            _safeAreaChangedHandler = null;
+
+            if (_attachedInputPane != null && _inputPaneStateChangedHandler != null)
+            {
+                _attachedInputPane.StateChanged -= _inputPaneStateChangedHandler;
+            }
+            _attachedInputPane = null;
+            _inputPaneStateChangedHandler = null;
+
+            RemoveHandler(InputElement.GotFocusEvent, OnMobileGotFocus);
+
+            if (_bannerVisibilityChangedHandler != null)
+            {
+                Fujify.Services.AdService.BannerVisibilityChanged -= _bannerVisibilityChangedHandler;
+                _bannerVisibilityChangedHandler = null;
+            }
+
+            if (_licenseChangedHandler != null)
+            {
+                Fujify.Services.LicenseService.AnyLicenseChanged -= _licenseChangedHandler;
+                _licenseChangedHandler = null;
+            }
+
+            if (_attachedWindow != null)
+            {
+                if (_windowActivatedHandler != null) _attachedWindow.Activated -= _windowActivatedHandler;
+                if (_windowDeactivatedHandler != null) _attachedWindow.Deactivated -= _windowDeactivatedHandler;
+                if (_windowPropertyChangedHandler != null) _attachedWindow.PropertyChanged -= _windowPropertyChangedHandler;
+            }
+            _attachedWindow = null;
+            _windowActivatedHandler = null;
+            _windowDeactivatedHandler = null;
+            _windowPropertyChangedHandler = null;
         }
 
         private void UpdateMaximizeButtonGlyph(bool isMaximized)

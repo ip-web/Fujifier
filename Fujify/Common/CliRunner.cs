@@ -107,7 +107,7 @@ Supported RAW formats:
 
         public static void PrintVersion()
         {
-            var version = typeof(CliRunner).Assembly.GetName().Version?.ToString(3) ?? "2.2.0";
+            var version = typeof(CliRunner).Assembly.GetName().Version?.ToString(3) ?? "2.2.1";
             Console.WriteLine($"Fujifier {version}");
         }
 
@@ -307,129 +307,109 @@ Supported RAW formats:
 
             int successCount = 0;
             int errorCount = 0;
+            int completedCount = 0;
             var stopwatch = Stopwatch.StartNew();
+            var rafConverter = new RafConverterService();
+            var reservedOutputPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var consoleLock = new object();
+            int maxConcurrency = DrivePerformanceHelper.GetOptimalConversionConcurrency(
+                files[0],
+                configuredConcurrency: 0,
+                isPro: true);
 
-            for (int i = 0; i < files.Count; i++)
-            {
-                string file = files[i];
-                string fileName = Path.GetFileName(file);
-                var fileSw = Stopwatch.StartNew();
-
-                if (!args.Quiet)
+            var items = files.Select((f, idx) => (File: f, Index: idx)).ToList();
+            System.Threading.Tasks.Parallel.ForEachAsync(
+                items,
+                new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = maxConcurrency },
+                async (item, ct) =>
                 {
-                    Console.Write($"[{i + 1}/{files.Count}] {fileName}... ");
-                }
+                    string file = item.File;
+                    string fileName = Path.GetFileName(file);
+                    var fileSw = Stopwatch.StartNew();
 
-                try
-                {
-                    bool isOriginallyDng = file.EndsWith(".dng", StringComparison.OrdinalIgnoreCase);
-                    string targetDngPath;
-
-                    if (!string.IsNullOrEmpty(outDir))
+                    try
                     {
-                        targetDngPath = Path.Combine(outDir, Path.ChangeExtension(fileName, ".dng"));
-                    }
-                    else
-                    {
-                        targetDngPath = Path.ChangeExtension(file, ".dng");
-                    }
+                        string initialTarget = !string.IsNullOrEmpty(outDir)
+                            ? Path.Combine(outDir, Path.ChangeExtension(fileName, ".dng"))
+                            : Path.ChangeExtension(file, ".dng");
 
-                    string dngToInject = file;
+                        string finalTarget = initialTarget;
+                        bool isOriginallyDng = file.EndsWith(".dng", StringComparison.OrdinalIgnoreCase);
+                        string inputDir = Path.GetDirectoryName(file) ?? string.Empty;
+                        string outputDir = Path.GetDirectoryName(initialTarget) ?? string.Empty;
+                        bool isSameFolder = string.Equals(Path.GetFullPath(inputDir), Path.GetFullPath(outputDir), StringComparison.OrdinalIgnoreCase);
+                        bool isExactSame = isOriginallyDng && string.Equals(Path.GetFullPath(file), Path.GetFullPath(initialTarget), StringComparison.OrdinalIgnoreCase);
 
-                    // 1. If not DNG, convert directly to targetDngPath
-                    if (!isOriginallyDng)
-                    {
-                        string? destDir = Path.GetDirectoryName(targetDngPath);
-                        if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
+                        lock (reservedOutputPaths)
                         {
-                            Directory.CreateDirectory(destDir);
-                        }
-
-                        var convResult = rawConverter.ConvertToDng(file, args.EmbedOriginalRaw, targetDngPath, args.LosslessCompression);
-                        if (!convResult.Success || string.IsNullOrEmpty(convResult.OutputDngPath) || !File.Exists(convResult.OutputDngPath))
-                        {
-                            throw new Exception(convResult.ErrorMessage ?? "RAW to DNG conversion failed.");
-                        }
-
-                        dngToInject = convResult.OutputDngPath;
-                    }
-
-                    // 2. Inject Fujifilm Metadata
-                    bool isInPlace = isOriginallyDng && string.Equals(Path.GetFullPath(file), Path.GetFullPath(targetDngPath), StringComparison.OrdinalIgnoreCase);
-                    string? customOut = isInPlace ? null : targetDngPath;
-
-                    var metaResult = metadataService.InjectFujifilmMetadata(
-                        dngToInject,
-                        outputFolder: null,
-                        createBackup: isInPlace && args.BackupOriginalFile,
-                        isOriginallyDng: isOriginallyDng,
-                        customOutputFilePath: customOut,
-                        targetUniqueCameraModel: cameraModel,
-                        sourceRawFilePath: file);
-
-                    if (!metaResult.Success)
-                    {
-                        if (!isOriginallyDng && File.Exists(targetDngPath))
-                        {
-                            try { File.Delete(targetDngPath); } catch { }
-                        }
-                        throw new Exception(metaResult.ErrorMessage ?? "Fujifilm metadata injection failed.");
-                    }
-
-                    string finalCustomOut = targetDngPath;
-
-                    // 2.5 Verify file integrity if requested
-                    if (args.VerifyFileIntegrity)
-                    {
-                        var integrity = fileIntegrityService.VerifyIntegrity(finalCustomOut);
-                        if (!integrity.IsValid)
-                        {
-                            if (!isOriginallyDng && File.Exists(targetDngPath))
+                            if (!isExactSame && !(isOriginallyDng && isSameFolder && args.BackupOriginalFile) &&
+                                (File.Exists(initialTarget) || reservedOutputPaths.Contains(initialTarget)))
                             {
-                                try { File.Delete(targetDngPath); } catch { }
+                                finalTarget = ConversionPipelineHelper.GetUniqueFilePath(initialTarget, reservedOutputPaths);
                             }
-                            throw new Exception($"File integrity check failed: {integrity.ErrorMessage}");
+                            else
+                            {
+                                reservedOutputPaths.Add(initialTarget);
+                            }
                         }
-                    }
 
-                    // 3. If film simulation was specified, generate and write sidecar XMP
-                    if (selectedPreset != null)
-                    {
-                        string xmpPath = Path.ChangeExtension(finalCustomOut, ".xmp");
-                        string xmpContent = presetService.GeneratePresetXml(selectedPreset);
-                        File.WriteAllText(xmpPath, xmpContent, Encoding.UTF8);
-                    }
+                        var request = new SingleConversionRequest(
+                            SourceFilePath: file,
+                            FinalDestFilePath: finalTarget,
+                            OutputFolder: outDir,
+                            CreateBackup: args.BackupOriginalFile,
+                            EmbedOriginalRaw: args.EmbedOriginalRaw,
+                            LosslessCompression: args.LosslessCompression,
+                            VerifyFileIntegrity: args.VerifyFileIntegrity,
+                            IsCaptureOneMode: false,
+                            RafContainerPath: null,
+                            TargetUniqueCameraModel: cameraModel);
 
-                    // 4. Handle backup / cleanup
-                    if (!args.BackupOriginalFile)
-                    {
-                        if (!string.Equals(Path.GetFullPath(file), Path.GetFullPath(finalCustomOut), StringComparison.OrdinalIgnoreCase))
+                        string finalCustomOut = await ConversionPipelineHelper.ExecuteSingleConversionAsync(
+                            request,
+                            rawConverter,
+                            rafConverter,
+                            metadataService,
+                            fileIntegrityService,
+                            ct);
+
+                        // If film simulation was specified, generate and write sidecar XMP
+                        if (selectedPreset != null)
                         {
-                            try { File.Delete(file); } catch { }
+                            string xmpPath = Path.ChangeExtension(finalCustomOut, ".xmp");
+                            string xmpContent = presetService.GeneratePresetXml(selectedPreset);
+                            await File.WriteAllTextAsync(xmpPath, xmpContent, Encoding.UTF8, ct);
+                        }
+
+                        fileSw.Stop();
+                        System.Threading.Interlocked.Increment(ref successCount);
+                        int done = System.Threading.Interlocked.Increment(ref completedCount);
+                        if (!args.Quiet)
+                        {
+                            lock (consoleLock)
+                            {
+                                Console.WriteLine($"[{done}/{files.Count}] {fileName}... [OK] -> {Path.GetFileName(finalCustomOut)} ({fileSw.Elapsed.TotalSeconds:F1}s)");
+                            }
                         }
                     }
-
-                    fileSw.Stop();
-                    successCount++;
-                    if (!args.Quiet)
+                    catch (Exception ex)
                     {
-                        Console.WriteLine($"[OK] -> {Path.GetFileName(finalCustomOut)} ({fileSw.Elapsed.TotalSeconds:F1}s)");
+                        fileSw.Stop();
+                        System.Threading.Interlocked.Increment(ref errorCount);
+                        int done = System.Threading.Interlocked.Increment(ref completedCount);
+                        lock (consoleLock)
+                        {
+                            if (!args.Quiet)
+                            {
+                                Console.WriteLine($"[{done}/{files.Count}] {fileName}... [FAILED] ({ex.Message})");
+                            }
+                            else
+                            {
+                                Console.Error.WriteLine($"Error processing '{fileName}': {ex.Message}");
+                            }
+                        }
                     }
-                }
-                catch (Exception ex)
-                {
-                    fileSw.Stop();
-                    errorCount++;
-                    if (!args.Quiet)
-                    {
-                        Console.WriteLine($"[FAILED] ({ex.Message})");
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine($"Error processing '{fileName}': {ex.Message}");
-                    }
-                }
-            }
+                }).GetAwaiter().GetResult();
 
             stopwatch.Stop();
             if (!args.Quiet)

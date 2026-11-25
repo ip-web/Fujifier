@@ -58,7 +58,7 @@ namespace Fujify.Services
             // 2. Try integrated high-performance native library conversion (dnglab_ffi)
             if (DngLabNative.IsAvailable)
             {
-                var (success, errorMsg) = DngLabNative.ConvertFile(filePath, dngFilePath, embedOriginalRaw);
+                var (success, errorMsg) = DngLabNative.ConvertFile(filePath, dngFilePath, embedOriginalRaw, losslessCompression);
                 if (success && File.Exists(dngFilePath))
                 {
                     return new ConversionResult(true, dngFilePath, null);
@@ -110,7 +110,7 @@ namespace Fujify.Services
             // 2. Try integrated high-performance native library conversion (dnglab_ffi)
             if (DngLabNative.IsAvailable)
             {
-                var (success, errorMsg) = await DngLabNative.ConvertFileAsync(filePath, dngFilePath, embedOriginalRaw, cancellationToken);
+                var (success, errorMsg) = await DngLabNative.ConvertFileAsync(filePath, dngFilePath, embedOriginalRaw, losslessCompression, cancellationToken);
                 if (success && File.Exists(dngFilePath))
                 {
                     return new ConversionResult(true, dngFilePath, null);

@@ -11,9 +11,9 @@
     <Product>Fujifier</Product>
     <AssemblyTitle>Fujifier</AssemblyTitle>
     <Description>Fujifilm Film Simulation Profiles for Any RAW Photo</Description>
-    <Version>2.2.0</Version>
-    <AssemblyVersion>2.2.0.0</AssemblyVersion>
-    <FileVersion>2.2.0.0</FileVersion>
+    <Version>2.2.1</Version>
+    <AssemblyVersion>2.2.1.0</AssemblyVersion>
+    <FileVersion>2.2.1.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,7 +25,11 @@
   <ItemGroup>
     <Folder Include="Models\" />
     <AvaloniaResource Include="Assets\**" />
-    <Content Include="libs\**" Condition="'$(TargetPlatformIdentifier)' == ''">
+    <!-- Include all platform libs when building without a specific RID (e.g. IDE/tests); otherwise bundle only the target RID -->
+    <Content Include="libs\**" Condition="'$(TargetPlatformIdentifier)' == '' and '$(RuntimeIdentifier)' == ''">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="libs\$(RuntimeIdentifier)\**" Condition="'$(TargetPlatformIdentifier)' == '' and '$(RuntimeIdentifier)' != '' and Exists('libs\$(RuntimeIdentifier)')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

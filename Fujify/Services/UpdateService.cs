@@ -26,6 +26,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -73,12 +74,18 @@ namespace Fujify.Services
             }
         }
 
+        private static readonly TimeSpan AutoCheckCooldown = TimeSpan.FromHours(6);
+
         public async Task<UpdateCheckResult> CheckForUpdateAsync(bool force = false, CancellationToken ct = default)
         {
             try
             {
-                _settingsService.Settings.LastUpdateCheck = DateTime.UtcNow;
-                _settingsService.Save();
+                if (!force &&
+                    _settingsService.Settings.LastUpdateCheck is DateTime lastCheck &&
+                    DateTime.UtcNow - lastCheck < AutoCheckCooldown)
+                {
+                    return UpdateCheckResult.UpToDate(CurrentVersionString);
+                }
 
                 var release = await FetchLatestReleaseAsync(PrimaryRepo, ct)
                            ?? await FetchLatestReleaseAsync(FallbackRepo, ct);
@@ -87,6 +94,9 @@ namespace Fujify.Services
                 {
                     return UpdateCheckResult.Failure("Could not retrieve latest release information from GitHub.", CurrentVersionString);
                 }
+
+                _settingsService.Settings.LastUpdateCheck = DateTime.UtcNow;
+                _settingsService.Save();
 
                 if (release.Version == null)
                 {
@@ -187,6 +197,8 @@ namespace Fujify.Services
                         string downloadUrl = assetElem.TryGetProperty("browser_download_url", out var aUrl) ? aUrl.GetString() ?? string.Empty : string.Empty;
                         long size = assetElem.TryGetProperty("size", out var aSize) ? aSize.GetInt64() : 0;
                         string contentType = assetElem.TryGetProperty("content_type", out var aType) ? aType.GetString() ?? string.Empty : string.Empty;
+                        string? digestRaw = assetElem.TryGetProperty("digest", out var aDigest) ? aDigest.GetString() : null;
+                        string? sha256Digest = NormalizeSha256Digest(digestRaw);
 
                         if (!string.IsNullOrWhiteSpace(assetName) && !string.IsNullOrWhiteSpace(downloadUrl))
                         {
@@ -195,7 +207,8 @@ namespace Fujify.Services
                                 Name = assetName,
                                 DownloadUrl = downloadUrl,
                                 Size = size,
-                                ContentType = contentType
+                                ContentType = contentType,
+                                Sha256Digest = sha256Digest
                             });
                         }
                     }
@@ -425,6 +438,17 @@ namespace Fujify.Services
             return list.FirstOrDefault();
         }
 
+        private static string? NormalizeSha256Digest(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+            string clean = raw.Trim();
+            if (clean.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase))
+            {
+                clean = clean.Substring("sha256:".Length);
+            }
+            return clean.Length == 64 ? clean.ToLowerInvariant() : null;
+        }
+
         public async Task<string> DownloadUpdateAsync(UpdateAsset asset, IProgress<double>? progress = null, CancellationToken ct = default)
         {
             if (asset == null || string.IsNullOrWhiteSpace(asset.DownloadUrl))
@@ -432,36 +456,76 @@ namespace Fujify.Services
                 throw new ArgumentException("Asset download URL is invalid.", nameof(asset));
             }
 
-            string tempDir = Path.Combine(Path.GetTempPath(), "Fujifier_Updates");
-            Directory.CreateDirectory(tempDir);
-            string destinationPath = Path.Combine(tempDir, asset.Name);
-
-            using var response = await _httpClient.GetAsync(asset.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);
-            response.EnsureSuccessStatusCode();
-
-            long totalBytes = response.Content.Headers.ContentLength ?? asset.Size;
-            long totalRead = 0;
-
-            using var contentStream = await response.Content.ReadAsStreamAsync(ct);
-            using var fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true);
-
-            byte[] buffer = new byte[81920];
-            int read;
-
-            while ((read = await contentStream.ReadAsync(buffer, 0, buffer.Length, ct)) > 0)
+            if (!Uri.TryCreate(asset.DownloadUrl, UriKind.Absolute, out var downloadUri) ||
+                downloadUri.Scheme != Uri.UriSchemeHttps)
             {
-                await fileStream.WriteAsync(buffer, 0, read, ct);
-                totalRead += read;
-
-                if (totalBytes > 0 && progress != null)
-                {
-                    double ratio = Math.Clamp((double)totalRead / totalBytes, 0.0, 1.0);
-                    progress.Report(ratio);
-                }
+                throw new InvalidOperationException("Update asset URL must use HTTPS.");
             }
 
-            progress?.Report(1.0);
-            return destinationPath;
+            string safeFileName = Path.GetFileName(asset.Name);
+            if (string.IsNullOrWhiteSpace(safeFileName))
+            {
+                throw new ArgumentException("Asset file name is invalid.", nameof(asset));
+            }
+
+            string tempDir = Path.Combine(Path.GetTempPath(), "Fujifier_Updates");
+            Directory.CreateDirectory(tempDir);
+            string destinationPath = Path.Combine(tempDir, safeFileName);
+            string partialPath = destinationPath + ".part";
+
+            try
+            {
+                using var response = await _httpClient.GetAsync(downloadUri, HttpCompletionOption.ResponseHeadersRead, ct);
+                response.EnsureSuccessStatusCode();
+
+                long? expectedLength = response.Content.Headers.ContentLength;
+                long totalBytes = expectedLength ?? asset.Size;
+                long totalRead = 0;
+
+                using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                using (var contentStream = await response.Content.ReadAsStreamAsync(ct))
+                using (var fileStream = new FileStream(partialPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
+                {
+                    byte[] buffer = new byte[81920];
+                    int read;
+
+                    while ((read = await contentStream.ReadAsync(buffer, 0, buffer.Length, ct)) > 0)
+                    {
+                        hasher.AppendData(buffer, 0, read);
+                        await fileStream.WriteAsync(buffer, 0, read, ct);
+                        totalRead += read;
+
+                        if (totalBytes > 0 && progress != null)
+                        {
+                            double ratio = Math.Clamp((double)totalRead / totalBytes, 0.0, 1.0);
+                            progress.Report(ratio);
+                        }
+                    }
+                }
+
+                if (expectedLength.HasValue && totalRead != expectedLength.Value)
+                {
+                    throw new IOException($"Incomplete update download: expected {expectedLength.Value} bytes, got {totalRead} bytes.");
+                }
+
+                if (!string.IsNullOrWhiteSpace(asset.Sha256Digest))
+                {
+                    string actualHash = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
+                    if (!string.Equals(actualHash, asset.Sha256Digest, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidDataException("Update package SHA-256 verification failed.");
+                    }
+                }
+
+                File.Move(partialPath, destinationPath, overwrite: true);
+                progress?.Report(1.0);
+                return destinationPath;
+            }
+            catch
+            {
+                try { if (File.Exists(partialPath)) File.Delete(partialPath); } catch { }
+                throw;
+            }
         }
 
         public bool LaunchInstallerAndExit(string installerFilePath)

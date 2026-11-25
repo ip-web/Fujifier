@@ -37,6 +37,7 @@ namespace Fujify.Services
         private const string LibraryName = "dnglab_ffi";
         private static readonly object _initLock = new();
         private static bool? _isAvailable;
+        private static bool _supportsConvertWithOptions = true;
         private static string? _loadError;
 
         /// <summary>
@@ -92,6 +93,31 @@ namespace Fujify.Services
             [MarshalAs(UnmanagedType.I1)] bool embedRaw,
             byte[] errBuf,
             UIntPtr errBufLen);
+
+        [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int dnglab_convert_file_with_options(
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string inPath,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string outPath,
+            [MarshalAs(UnmanagedType.I1)] bool embedRaw,
+            [MarshalAs(UnmanagedType.I1)] bool losslessCompression,
+            byte[] errBuf,
+            UIntPtr errBufLen);
+
+        private static int InvokeNativeConvert(string inputPath, string outputPath, bool embedRaw, bool losslessCompression, byte[] errBuf)
+        {
+            if (_supportsConvertWithOptions)
+            {
+                try
+                {
+                    return dnglab_convert_file_with_options(inputPath, outputPath, embedRaw, losslessCompression, errBuf, (UIntPtr)errBuf.Length);
+                }
+                catch (EntryPointNotFoundException)
+                {
+                    _supportsConvertWithOptions = false;
+                }
+            }
+            return dnglab_convert_file(inputPath, outputPath, embedRaw, errBuf, (UIntPtr)errBuf.Length);
+        }
 
         /// <summary>
         /// Checks whether the native dnglab_ffi library is available and can be loaded.
@@ -155,7 +181,7 @@ namespace Fujify.Services
         /// <summary>
         /// Converts a RAW camera file to DNG synchronously in-process.
         /// </summary>
-        public static (bool Success, string? ErrorMessage) ConvertFile(string inputPath, string outputPath, bool embedRaw)
+        public static (bool Success, string? ErrorMessage) ConvertFile(string inputPath, string outputPath, bool embedRaw, bool losslessCompression = true)
         {
             if (!IsAvailable)
             {
@@ -165,7 +191,7 @@ namespace Fujify.Services
             try
             {
                 byte[] errorBuf = new byte[2048];
-                int result = dnglab_convert_file(inputPath, outputPath, embedRaw, errorBuf, (UIntPtr)errorBuf.Length);
+                int result = InvokeNativeConvert(inputPath, outputPath, embedRaw, losslessCompression, errorBuf);
 
                 if (result == 0)
                 {
@@ -178,11 +204,10 @@ namespace Fujify.Services
                     errorMsg = $"Native conversion failed with exit code {result}";
                 }
 
-                // Upstream rawler/dnglab has mismatched Make strings or missing model aliases for certain cameras
-                // (e.g. Pentax K200D/K20D where camera writes 'PENTAX Corporation', Leaf Aptus where camera writes 'Creo/Leaf',
-                // Konica Minolta DYNAX/MAXXUM 5D / ALPHA SWEET DIGITAL, Pentax K2000, Samsung GX-1L, Hasselblad Lunar, Sony FX2, etc.).
-                if (errorMsg.Contains("Unknown camera", StringComparison.OrdinalIgnoreCase) ||
-                    errorMsg.Contains("Couldn't find a decoder", StringComparison.OrdinalIgnoreCase))
+                // Fallback only if native binary did not already handle normalization (legacy binary without options export)
+                if (!_supportsConvertWithOptions &&
+                    (errorMsg.Contains("Unknown camera", StringComparison.OrdinalIgnoreCase) ||
+                     errorMsg.Contains("Couldn't find a decoder", StringComparison.OrdinalIgnoreCase)))
                 {
                     var (tempWithFixedMake, is5d) = TryCreateTempWithNormalizedCamera(inputPath, errorMsg);
                     if (tempWithFixedMake != null)
@@ -190,7 +215,7 @@ namespace Fujify.Services
                         try
                         {
                             byte[] retryErrorBuf = new byte[2048];
-                            int retryResult = dnglab_convert_file(tempWithFixedMake, outputPath, embedRaw, retryErrorBuf, (UIntPtr)retryErrorBuf.Length);
+                            int retryResult = InvokeNativeConvert(tempWithFixedMake, outputPath, embedRaw, losslessCompression, retryErrorBuf);
                             if (retryResult == 0)
                             {
                                 if (is5d && File.Exists(outputPath))
@@ -501,20 +526,7 @@ namespace Fujify.Services
         private static int FindBytes(byte[] source, byte[] pattern)
         {
             if (pattern.Length == 0 || source.Length < pattern.Length) return -1;
-            for (int i = 0; i <= source.Length - pattern.Length; i++)
-            {
-                bool match = true;
-                for (int j = 0; j < pattern.Length; j++)
-                {
-                    if (source[i + j] != pattern[j])
-                    {
-                        match = false;
-                        break;
-                    }
-                }
-                if (match) return i;
-            }
-            return -1;
+            return source.AsSpan().IndexOf(pattern);
         }
 
         private static void RestoreMinolta5DModelName(string dngPath)
@@ -558,12 +570,13 @@ namespace Fujify.Services
             string inputPath,
             string outputPath,
             bool embedRaw,
+            bool losslessCompression = true,
             CancellationToken cancellationToken = default)
         {
             return Task.Run(() =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                return ConvertFile(inputPath, outputPath, embedRaw);
+                return ConvertFile(inputPath, outputPath, embedRaw, losslessCompression);
             }, cancellationToken);
         }
     }

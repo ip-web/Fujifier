@@ -8,6 +8,7 @@ use std::os::raw::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::Once;
+use rawler::dng::DngCompression;
 use rawler::dng::convert::{ConvertParams, convert_raw_file};
 use rawler::decoders::supported_extensions;
 
@@ -52,8 +53,8 @@ pub unsafe extern "C" fn dnglab_is_extension_supported(ext_ptr: *const c_char) -
     result.unwrap_or(false)
 }
 
-/// Converts a RAW camera file to DNG.
-/// 
+/// Converts a RAW camera file to DNG using lossless compression.
+///
 /// Returns:
 ///   0 on success
 ///   Non-zero on error (and populates error_msg_buf with a null-terminated message if provided)
@@ -62,6 +63,32 @@ pub unsafe extern "C" fn dnglab_convert_file(
     input_path_ptr: *const c_char,
     output_path_ptr: *const c_char,
     embed_raw: bool,
+    error_msg_buf: *mut c_char,
+    error_msg_buf_len: usize,
+) -> i32 {
+    unsafe {
+        dnglab_convert_file_with_options(
+            input_path_ptr,
+            output_path_ptr,
+            embed_raw,
+            true,
+            error_msg_buf,
+            error_msg_buf_len,
+        )
+    }
+}
+
+/// Converts a RAW camera file to DNG with explicit compression selection.
+///
+/// Returns:
+///   0 on success
+///   Non-zero on error (and populates error_msg_buf with a null-terminated message if provided)
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dnglab_convert_file_with_options(
+    input_path_ptr: *const c_char,
+    output_path_ptr: *const c_char,
+    embed_raw: bool,
+    lossless_compression: bool,
     error_msg_buf: *mut c_char,
     error_msg_buf_len: usize,
 ) -> i32 {
@@ -115,6 +142,11 @@ pub unsafe extern "C" fn dnglab_convert_file(
 
         let mut params = ConvertParams::default();
         params.embedded = embed_raw;
+        params.compression = if lossless_compression {
+            DngCompression::Lossless
+        } else {
+            DngCompression::Uncompressed
+        };
         params.software = "Fujifier / DNGLab Native".into();
 
         match convert_raw_file(&in_path, &mut writer, &params) {
@@ -228,212 +260,82 @@ struct NormalizedCamera {
     is_5d_minolta: bool,
 }
 
+fn replace_bytes_in_place(data: &mut [u8], err_str: &str, err_hint: Option<&str>, target: &[u8], replacement: &[u8]) -> bool {
+    if target.is_empty() || replacement.len() != target.len() || data.len() < target.len() {
+        return false;
+    }
+    let hint_matches = err_hint.map_or(false, |h| err_str.contains(h));
+    if !hint_matches && !data.windows(target.len()).any(|w| w == target) {
+        return false;
+    }
+    let mut modified = false;
+    let mut i = 0;
+    while i <= data.len() - target.len() {
+        if &data[i..i + target.len()] == target {
+            data[i..i + target.len()].copy_from_slice(replacement);
+            modified = true;
+            i += target.len();
+        } else {
+            i += 1;
+        }
+    }
+    modified
+}
+
 fn try_create_temp_with_normalized_camera(path: &std::path::Path, err_str: &str) -> Option<NormalizedCamera> {
     let mut data = std::fs::read(path).ok()?;
     let mut modified = false;
     let mut is_5d = false;
 
-    // 1. PENTAX Corporation -> PENTAX
-    let pentax_target = b"PENTAX Corporation";
-    if err_str.contains("PENTAX Corporation") || data.windows(pentax_target.len()).any(|w| w == pentax_target) {
-        let replacement = b"PENTAX\0           ";
-        for i in 0..data.len().saturating_sub(pentax_target.len()) {
-            if &data[i..i + pentax_target.len()] == pentax_target {
-                data[i..i + pentax_target.len()].copy_from_slice(replacement);
-                modified = true;
-            }
+    let simple_rules: &[(&str, &[u8], &[u8])] = &[
+        ("PENTAX Corporation", b"PENTAX Corporation", b"PENTAX\0           "),
+        ("Creo/Leaf", b"<tiff:Make>Creo/Leaf</tiff:Make>", b"<tiff:Make>Leaf</tiff:Make>     "),
+        ("K2000", b"PENTAX K2000", b"PENTAX K-m  "),
+        ("ILME-FX2", b"ILME-FX2", b"ILME-FX3"),
+        ("DMC-GM1S", b"DMC-GM1S", b"DMC-GM1\0"),
+        ("FZ45", b"DC-FZ45\0", b"DMC-FZ45"),
+        ("NIKON 1 S1", b"NIKON 1 S1", b"NIKON 1 J2"),
+        ("NIKON 1 J4", b"NIKON 1 J4", b"NIKON 1 V3"),
+        ("NIKON D1H", b"NIKON D1H", b"NIKON D1\0"),
+        ("P7700", b"COOLPIX P7700", b"COOLPIX P7800"),
+        ("DiMAGE 5", b"DiMAGE 5", b"DiMAGE 7"),
+        ("EK-GN120", b"EK-GN120", b"NX300\0\0\0"),
+    ];
+
+    for (hint, target, replacement) in simple_rules {
+        if replace_bytes_in_place(&mut data, err_str, Some(hint), target, replacement) {
+            modified = true;
         }
     }
 
-    // 2. Leaf MOS: <tiff:Make>Creo/Leaf</tiff:Make> -> <tiff:Make>Leaf</tiff:Make>     
-    let creo_leaf_target = b"<tiff:Make>Creo/Leaf</tiff:Make>";
-    if err_str.contains("Creo/Leaf") || data.windows(creo_leaf_target.len()).any(|w| w == creo_leaf_target) {
-        let replacement = b"<tiff:Make>Leaf</tiff:Make>     ";
-        for i in 0..data.len().saturating_sub(creo_leaf_target.len()) {
-            if &data[i..i + creo_leaf_target.len()] == creo_leaf_target {
-                data[i..i + creo_leaf_target.len()].copy_from_slice(replacement);
-                modified = true;
-            }
-        }
-    }
-
-    // 3. Konica Minolta MRW: DYNAX 5D -> DYNAX 7D, MAXXUM 5D -> MAXXUM 7D, ALPHA-5 DIGITAL -> ALPHA-7 DIGITAL, ALPHA SWEET DIGITAL
-    let pairs: [(&[u8], &[u8]); 4] = [
+    // Konica Minolta MRW: 5D -> 7D variants (requires restoring 5D name on the resulting DNG)
+    let minolta_pairs: [(&[u8], &[u8]); 4] = [
         (b"DYNAX 5D", b"DYNAX 7D"),
         (b"MAXXUM 5D", b"MAXXUM 7D"),
         (b"ALPHA-5 DIGITAL", b"ALPHA-7 DIGITAL"),
         (b"ALPHA SWEET DIGITAL", b"ALPHA-7 DIGITAL    "),
     ];
-
-    for (target, replacement) in pairs {
-        if err_str.contains(std::str::from_utf8(target).unwrap_or("")) || data.windows(target.len()).any(|w| w == target) {
-            for i in 0..data.len().saturating_sub(target.len()) {
-                if &data[i..i + target.len()] == target {
-                    data[i..i + target.len()].copy_from_slice(replacement);
-                    modified = true;
-                    is_5d = true;
-                }
-            }
+    for (target, replacement) in minolta_pairs {
+        let hint = std::str::from_utf8(target).ok();
+        if replace_bytes_in_place(&mut data, err_str, hint, target, replacement) {
+            modified = true;
+            is_5d = true;
         }
     }
 
-    // 4. PENTAX K2000 -> PENTAX K-m
-    let k2000_target = b"PENTAX K2000";
-    let km_replacement = b"PENTAX K-m  ";
-    if err_str.contains("K2000") || data.windows(k2000_target.len()).any(|w| w == k2000_target) {
-        for i in 0..data.len().saturating_sub(k2000_target.len()) {
-            if &data[i..i + k2000_target.len()] == k2000_target {
-                data[i..i + k2000_target.len()].copy_from_slice(km_replacement);
-                modified = true;
-            }
-        }
+    // SAMSUNG TECHWIN GX-1L -> PENTAX *ist D
+    if replace_bytes_in_place(&mut data, err_str, Some("SAMSUNG TECHWIN"), b"SAMSUNG TECHWIN", b"PENTAX\0        ") {
+        modified = true;
+        replace_bytes_in_place(&mut data, err_str, None, b"GX-1L", b"*istD");
     }
 
-    // 5. SAMSUNG TECHWIN GX-1L -> PENTAX *ist D
-    let samsung_techwin = b"SAMSUNG TECHWIN";
-    let pentax_pad = b"PENTAX\0        ";
-    if err_str.contains("SAMSUNG TECHWIN") || data.windows(samsung_techwin.len()).any(|w| w == samsung_techwin) {
-        for i in 0..data.len().saturating_sub(samsung_techwin.len()) {
-            if &data[i..i + samsung_techwin.len()] == samsung_techwin {
-                data[i..i + samsung_techwin.len()].copy_from_slice(pentax_pad);
-                modified = true;
-            }
+    // HASSELBLAD Lunar -> SONY NEX-7
+    if err_str.contains("Lunar") || (err_str.contains("HASSELBLAD") && data.windows(5).any(|w| w == b"Lunar")) {
+        if replace_bytes_in_place(&mut data, err_str, Some("HASSELBLAD"), b"HASSELBLAD", b"SONY\0     ") {
+            modified = true;
         }
-        let gx1l_target = b"GX-1L";
-        let istd_repl = b"*istD";
-        for i in 0..data.len().saturating_sub(gx1l_target.len()) {
-            if &data[i..i + gx1l_target.len()] == gx1l_target {
-                data[i..i + gx1l_target.len()].copy_from_slice(istd_repl);
-                modified = true;
-            }
-        }
-    }
-
-    // 6. HASSELBLAD Lunar -> SONY NEX-7
-    let hasselblad_target = b"HASSELBLAD";
-    let sony_replacement = b"SONY\0     ";
-    if err_str.contains("Lunar") || (err_str.contains("HASSELBLAD") && data.windows(b"Lunar".len()).any(|w| w == b"Lunar")) {
-        for i in 0..data.len().saturating_sub(hasselblad_target.len()) {
-            if &data[i..i + hasselblad_target.len()] == hasselblad_target {
-                data[i..i + hasselblad_target.len()].copy_from_slice(sony_replacement);
-                modified = true;
-            }
-        }
-        let lunar_target = b"Lunar";
-        let nex7_repl = b"NEX-7";
-        for i in 0..data.len().saturating_sub(lunar_target.len()) {
-            if &data[i..i + lunar_target.len()] == lunar_target {
-                data[i..i + lunar_target.len()].copy_from_slice(nex7_repl);
-                modified = true;
-            }
-        }
-    }
-
-    // 7. SONY ILME-FX2 -> ILME-FX3
-    let fx2_target = b"ILME-FX2";
-    let fx3_repl = b"ILME-FX3";
-    if err_str.contains("ILME-FX2") || data.windows(fx2_target.len()).any(|w| w == fx2_target) {
-        for i in 0..data.len().saturating_sub(fx2_target.len()) {
-            if &data[i..i + fx2_target.len()] == fx2_target {
-                data[i..i + fx2_target.len()].copy_from_slice(fx3_repl);
-                modified = true;
-            }
-        }
-    }
-
-    // 8. Panasonic DMC-GM1S -> DMC-GM1\0
-    let gm1s_target = b"DMC-GM1S";
-    let gm1_repl = b"DMC-GM1\0";
-    if err_str.contains("DMC-GM1S") || data.windows(gm1s_target.len()).any(|w| w == gm1s_target) {
-        for i in 0..data.len().saturating_sub(gm1s_target.len()) {
-            if &data[i..i + gm1s_target.len()] == gm1s_target {
-                data[i..i + gm1s_target.len()].copy_from_slice(gm1_repl);
-                modified = true;
-            }
-        }
-    }
-
-    // 9. Panasonic DC-FZ45 -> DMC-FZ45
-    let fz45_null = b"DC-FZ45\0";
-    let fz45_repl = b"DMC-FZ45";
-    if err_str.contains("FZ45") || data.windows(fz45_null.len()).any(|w| w == fz45_null) {
-        for i in 0..data.len().saturating_sub(fz45_null.len()) {
-            if &data[i..i + fz45_null.len()] == fz45_null {
-                data[i..i + fz45_null.len()].copy_from_slice(fz45_repl);
-                modified = true;
-            }
-        }
-    }
-
-    // 10. Nikon 1 S1 -> NIKON 1 J2 (identical 10.1MP CX sensor)
-    let s1_target = b"NIKON 1 S1";
-    let s1_repl = b"NIKON 1 J2";
-    if err_str.contains("NIKON 1 S1") || data.windows(s1_target.len()).any(|w| w == s1_target) {
-        for i in 0..data.len().saturating_sub(s1_target.len()) {
-            if &data[i..i + s1_target.len()] == s1_target {
-                data[i..i + s1_target.len()].copy_from_slice(s1_repl);
-                modified = true;
-            }
-        }
-    }
-
-    // 11. Nikon 1 J4 -> NIKON 1 V3 (identical 18.4MP CX sensor)
-    let j4_target = b"NIKON 1 J4";
-    let j4_repl = b"NIKON 1 V3";
-    if err_str.contains("NIKON 1 J4") || data.windows(j4_target.len()).any(|w| w == j4_target) {
-        for i in 0..data.len().saturating_sub(j4_target.len()) {
-            if &data[i..i + j4_target.len()] == j4_target {
-                data[i..i + j4_target.len()].copy_from_slice(j4_repl);
-                modified = true;
-            }
-        }
-    }
-
-    // 12. Nikon D1H -> NIKON D1\0 (identical 2.7MP CCD sensor)
-    let d1h_target = b"NIKON D1H";
-    let d1h_repl = b"NIKON D1\0";
-    if err_str.contains("NIKON D1H") || data.windows(d1h_target.len()).any(|w| w == d1h_target) {
-        for i in 0..data.len().saturating_sub(d1h_target.len()) {
-            if &data[i..i + d1h_target.len()] == d1h_target {
-                data[i..i + d1h_target.len()].copy_from_slice(d1h_repl);
-                modified = true;
-            }
-        }
-    }
-
-    // 13. Nikon COOLPIX P7700 -> COOLPIX P7800 (identical 12.2MP BSI CMOS sensor)
-    let p7700_target = b"COOLPIX P7700";
-    let p7700_repl = b"COOLPIX P7800";
-    if err_str.contains("P7700") || data.windows(p7700_target.len()).any(|w| w == p7700_target) {
-        for i in 0..data.len().saturating_sub(p7700_target.len()) {
-            if &data[i..i + p7700_target.len()] == p7700_target {
-                data[i..i + p7700_target.len()].copy_from_slice(p7700_repl);
-                modified = true;
-            }
-        }
-    }
-
-    // 14. Minolta DiMAGE 5 -> DiMAGE 7 (identical MRW sensor pipeline)
-    let dimage5_target = b"DiMAGE 5";
-    let dimage5_repl = b"DiMAGE 7";
-    if err_str.contains("DiMAGE 5") || data.windows(dimage5_target.len()).any(|w| w == dimage5_target) {
-        for i in 0..data.len().saturating_sub(dimage5_target.len()) {
-            if &data[i..i + dimage5_target.len()] == dimage5_target {
-                data[i..i + dimage5_target.len()].copy_from_slice(dimage5_repl);
-                modified = true;
-            }
-        }
-    }
-
-    // 15. Samsung Galaxy NX EK-GN120 -> NX300 (identical 20.3MP APS-C sensor)
-    let gn120_target = b"EK-GN120";
-    let gn120_repl = b"NX300\0\0";
-    if err_str.contains("EK-GN120") || data.windows(gn120_target.len()).any(|w| w == gn120_target) {
-        for i in 0..data.len().saturating_sub(gn120_target.len()) {
-            if &data[i..i + gn120_target.len()] == gn120_target {
-                data[i..i + gn120_target.len()].copy_from_slice(gn120_repl);
-                modified = true;
-            }
+        if replace_bytes_in_place(&mut data, err_str, Some("Lunar"), b"Lunar", b"NEX-7") {
+            modified = true;
         }
     }
 

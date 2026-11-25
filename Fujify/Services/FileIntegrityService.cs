@@ -75,6 +75,19 @@ namespace Fujify.Services
             }, cancellationToken);
         }
 
+        private static bool TryReadExact(Stream stream, byte[] buffer, int count)
+        {
+            try
+            {
+                stream.ReadExactly(buffer, 0, count);
+                return true;
+            }
+            catch (EndOfStreamException)
+            {
+                return false;
+            }
+        }
+
         private static FileIntegrityResult VerifyDng(string filePath, long length)
         {
             if (length < 1024)
@@ -85,7 +98,7 @@ namespace Fujify.Services
             using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 8192);
 
             byte[] header = new byte[8];
-            if (fs.Read(header, 0, 8) < 8)
+            if (!TryReadExact(fs, header, 8))
             {
                 return FileIntegrityResult.Failure("Unable to read TIFF/DNG header.");
             }
@@ -124,7 +137,7 @@ namespace Fujify.Services
 
             fs.Seek(ifdOffset, SeekOrigin.Begin);
             byte[] countBuf = new byte[2];
-            if (fs.Read(countBuf, 0, 2) < 2)
+            if (!TryReadExact(fs, countBuf, 2))
             {
                 return FileIntegrityResult.Failure("Could not read IFD0 entry count.");
             }
@@ -145,7 +158,7 @@ namespace Fujify.Services
             }
 
             byte[] entriesBuf = new byte[entryCount * 12];
-            if (fs.Read(entriesBuf, 0, entriesBuf.Length) < entriesBuf.Length)
+            if (!TryReadExact(fs, entriesBuf, entriesBuf.Length))
             {
                 return FileIntegrityResult.Failure("Incomplete IFD0 entries in file.");
             }
@@ -192,7 +205,7 @@ namespace Fujify.Services
 
             using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096);
             byte[] header = new byte[148];
-            if (fs.Read(header, 0, 148) < 148)
+            if (!TryReadExact(fs, header, 148))
             {
                 return FileIntegrityResult.Failure("Unable to read RAF header.");
             }
@@ -226,7 +239,7 @@ namespace Fujify.Services
             // Verify CFA Directory can be read
             fs.Seek(metaOff, SeekOrigin.Begin);
             byte[] countBuf = new byte[4];
-            if (fs.Read(countBuf, 0, 4) < 4)
+            if (!TryReadExact(fs, countBuf, 4))
             {
                 return FileIntegrityResult.Failure("Unable to read CFA Meta Directory tag count.");
             }
@@ -250,7 +263,7 @@ namespace Fujify.Services
 
             using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096);
             byte[] startBuf = new byte[64];
-            if (fs.Read(startBuf, 0, 64) < 64)
+            if (!TryReadExact(fs, startBuf, 64))
             {
                 return FileIntegrityResult.Failure("Unable to read initial bytes of the file.");
             }

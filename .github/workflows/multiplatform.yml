@@ -48,15 +48,67 @@ jobs:
         run: |
           dotnet publish Fujify/Fujify.csproj -f net10.0 -c Release -r win-arm64 --self-contained true -o ./publish/win-arm64
 
-      - name: Publish Linux Desktop x64
-        run: |
-          dotnet publish Fujify/Fujify.csproj -f net10.0 -c Release -r linux-x64 --self-contained true -o ./publish/linux-x64
-
-      - name: Upload Desktop Artifacts (Windows & Linux)
+      - name: Upload Desktop Artifacts (Windows)
         uses: actions/upload-artifact@v4
         with:
           name: fujify-desktop-builds
           path: ./publish/
+
+  # -------------------------------------------------------------
+  # 1b. Linux Desktop (x64 with Native dnglab_ffi & raw2raf_ffi)
+  # -------------------------------------------------------------
+  build-linux:
+    name: Build Linux Desktop (x64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache Rust Linux Artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            native/dnglab_ffi/target/
+            tools/Raw2Raf/target/
+          key: ${{ runner.os }}-cargo-linux-${{ hashFiles('native/dnglab_ffi/Cargo.lock', 'native/dnglab_ffi/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-linux-
+
+      - name: Build Native Rust Libraries (dnglab_ffi & raw2raf_ffi)
+        run: |
+          cd native/dnglab_ffi
+          cargo build --release
+          cd ../..
+          mkdir -p Fujify/libs/linux-x64
+          cp native/dnglab_ffi/target/release/libdnglab_ffi.so Fujify/libs/linux-x64/
+          if [ -f tools/Raw2Raf/Cargo.toml ]; then
+            cd tools/Raw2Raf
+            cargo build --lib --release
+            cd ../..
+            if [ -f tools/Raw2Raf/target/release/libraw2raf_ffi.so ]; then
+              cp tools/Raw2Raf/target/release/libraw2raf_ffi.so Fujify/libs/linux-x64/
+            fi
+          fi
+
+      - name: Publish Linux Desktop x64
+        run: |
+          dotnet restore Fujify/Fujify.csproj
+          dotnet publish Fujify/Fujify.csproj -f net10.0 -c Release -r linux-x64 --self-contained true --no-restore -o ./publish/linux-x64
+          cp Fujify/libs/linux-x64/*.so ./publish/linux-x64/ 2>/dev/null || true
+
+      - name: Upload Linux Desktop Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fujify-linux-build
+          path: ./publish/linux-x64/
 
   # -------------------------------------------------------------
   # 2. macOS Desktop (Apple Silicon & Intel with Native dnglab_ffi)
@@ -95,14 +147,14 @@ jobs:
       - name: Upload macOS Apple Silicon Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Fujifier-v2.2.0-macOS-AppleSilicon
-          path: release/Fujifier-v2.2.0-macOS-AppleSilicon.zip
+          name: Fujifier-v2.2.1-macOS-AppleSilicon
+          path: release/Fujifier-v2.2.1-macOS-AppleSilicon.zip
 
       - name: Upload macOS Intel Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Fujifier-v2.2.0-macOS-Intel
-          path: release/Fujifier-v2.2.0-macOS-Intel.zip
+          name: Fujifier-v2.2.1-macOS-Intel
+          path: release/Fujifier-v2.2.1-macOS-Intel.zip
 
   # -------------------------------------------------------------
   # 3. Android App (APK & AAB)
@@ -137,16 +189,16 @@ jobs:
           dotnet build Fujify.Android/Fujify.Android.csproj -c Release -r android-arm64 -p:AndroidPackageFormat=apk
           SIGNED_APK=$(find Fujify.Android/bin/Release -name "*Signed.apk" | head -n 1)
           if [ -n "$SIGNED_APK" ]; then
-            cp "$SIGNED_APK" ./publish-android/Fujify-v2.2.0-Android-arm64.apk
+            cp "$SIGNED_APK" ./publish-android/Fujify-v2.2.1-Android-arm64.apk
           else
-            cp $(find Fujify.Android/bin/Release -name "*.apk" | head -n 1) ./publish-android/Fujify-v2.2.0-Android-arm64.apk
+            cp $(find Fujify.Android/bin/Release -name "*.apk" | head -n 1) ./publish-android/Fujify-v2.2.1-Android-arm64.apk
           fi
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
           name: fujify-android-apk
-          path: ./publish-android/Fujify-v2.2.0-Android-arm64.apk
+          path: ./publish-android/Fujify-v2.2.1-Android-arm64.apk
 
   # -------------------------------------------------------------
   # 3. iOS App (iPhone & iPad)
@@ -279,12 +331,12 @@ jobs:
           ls -la ./publish/Payload/*.app/Frameworks/ || true
           file ./publish/Payload/*.app/Fujify.iOS || true
           cd ./publish
-          zip -r -y Fujify-v2.2.0-iOS.ipa Payload
+          zip -r -y Fujify-v2.2.1-iOS.ipa Payload
           cd ..
 
       - name: Upload iOS IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: fujify-ios-ipa
-          path: ./publish/Fujify-v2.2.0-iOS.ipa
+          path: ./publish/Fujify-v2.2.1-iOS.ipa
 

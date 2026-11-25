@@ -26,10 +26,20 @@ using Fujify.Localization;
 
 namespace Fujify.Models
 {
+    public enum FileProcessingState
+    {
+        Pending,
+        Processing,
+        Completed,
+        Skipped,
+        Error
+    }
+
     public class FileItem : INotifyPropertyChanged, IDisposable
     {
         private string _filePath = string.Empty;
         private string _status = "Pending";
+        private FileProcessingState _processingState = FileProcessingState.Pending;
         private string? _errorMessage;
         private Bitmap? _thumbnail;
         private string _cameraMakeAndModel = string.Empty;
@@ -67,6 +77,38 @@ namespace Fujify.Models
 
         public string FileName => Path.GetFileName(_filePath);
 
+        public FileProcessingState ProcessingState
+        {
+            get => _processingState;
+            private set
+            {
+                if (_processingState != value)
+                {
+                    _processingState = value;
+                    OnPropertyChanged(nameof(ProcessingState));
+                }
+            }
+        }
+
+        public void SetStatus(string status, FileProcessingState explicitState, string? errorMessage = null)
+        {
+            _processingState = explicitState;
+            if (!string.IsNullOrEmpty(errorMessage))
+            {
+                ErrorMessage = errorMessage;
+            }
+            if (_status != status)
+            {
+                _status = status;
+                RaiseStatusNotifications();
+            }
+            else
+            {
+                OnPropertyChanged(nameof(ProcessingState));
+                RaiseStatusNotifications();
+            }
+        }
+
         public string Status
         {
             get => _status;
@@ -75,18 +117,59 @@ namespace Fujify.Models
                 if (_status != value)
                 {
                     _status = value;
-                    OnPropertyChanged(nameof(Status));
-                    OnPropertyChanged(nameof(LocalizedStatus));
-                    OnPropertyChanged(nameof(StatusIcon));
-                    OnPropertyChanged(nameof(StatusColor));
-                    OnPropertyChanged(nameof(IsCompleted));
-                    OnPropertyChanged(nameof(IsError));
-                    OnPropertyChanged(nameof(IsActive));
-                    OnPropertyChanged(nameof(ErrorBackground));
-                    OnPropertyChanged(nameof(ErrorBorderBrush));
-                    OnPropertyChanged(nameof(ErrorBorderThickness));
+                    _processingState = InferProcessingState(value);
+                    OnPropertyChanged(nameof(ProcessingState));
+                    RaiseStatusNotifications();
                 }
             }
+        }
+
+        private void RaiseStatusNotifications()
+        {
+            OnPropertyChanged(nameof(Status));
+            OnPropertyChanged(nameof(LocalizedStatus));
+            OnPropertyChanged(nameof(StatusIcon));
+            OnPropertyChanged(nameof(StatusColor));
+            OnPropertyChanged(nameof(IsCompleted));
+            OnPropertyChanged(nameof(IsError));
+            OnPropertyChanged(nameof(IsActive));
+            OnPropertyChanged(nameof(ErrorBackground));
+            OnPropertyChanged(nameof(ErrorBorderBrush));
+            OnPropertyChanged(nameof(ErrorBorderThickness));
+        }
+
+        public static FileProcessingState InferProcessingState(string? status)
+        {
+            if (string.IsNullOrWhiteSpace(status) || status.Equals("Pending", StringComparison.OrdinalIgnoreCase))
+            {
+                return FileProcessingState.Pending;
+            }
+            if (status == "✔" || status == "✓" ||
+                status.Contains("Done", StringComparison.OrdinalIgnoreCase) ||
+                status.Contains("Complete", StringComparison.OrdinalIgnoreCase) ||
+                status.Contains("successful", StringComparison.OrdinalIgnoreCase))
+            {
+                return FileProcessingState.Completed;
+            }
+            if (status.StartsWith("Skipped", StringComparison.OrdinalIgnoreCase))
+            {
+                return FileProcessingState.Skipped;
+            }
+            if (status.Contains("Error", StringComparison.OrdinalIgnoreCase) ||
+                status.Contains("Fail", StringComparison.OrdinalIgnoreCase) ||
+                status.Contains("Invalid", StringComparison.OrdinalIgnoreCase))
+            {
+                return FileProcessingState.Error;
+            }
+            if (status.Equals("Processing", StringComparison.OrdinalIgnoreCase) ||
+                status.Contains("...", StringComparison.OrdinalIgnoreCase) ||
+                status.Contains("Converting", StringComparison.OrdinalIgnoreCase) ||
+                status.Contains("Verifying", StringComparison.OrdinalIgnoreCase) ||
+                status.Contains("RAF →", StringComparison.OrdinalIgnoreCase))
+            {
+                return FileProcessingState.Processing;
+            }
+            return FileProcessingState.Pending;
         }
 
         public string LocalizedStatus
@@ -95,7 +178,7 @@ namespace Fujify.Models
             {
                 if (string.IsNullOrEmpty(_status)) return "—";
                 if (IsCompleted) return _status == "✔" || _status == "✓" ? _status : LocalizationManager.Tr("StatusDone");
-                if (_status.Equals("Pending", StringComparison.OrdinalIgnoreCase)) return LocalizationManager.Tr("StatusPending");
+                if (_processingState == FileProcessingState.Pending) return LocalizationManager.Tr("StatusPending");
                 if (IsActive) return LocalizationManager.Tr("StatusProcessing");
                 if (IsError) return LocalizationManager.Tr("StatusError");
                 return _status;
@@ -305,18 +388,18 @@ namespace Fujify.Models
             }
         }
 
-        public bool IsCompleted => _status.Contains("Done", System.StringComparison.OrdinalIgnoreCase)
-
+        public bool IsCompleted => _processingState == FileProcessingState.Completed
+            || _status.Contains("Done", System.StringComparison.OrdinalIgnoreCase)
             || _status.Contains("Complete", System.StringComparison.OrdinalIgnoreCase)
             || _status == "✔" || _status == "✓";
 
-        public bool IsError => _status.Contains("Error", System.StringComparison.OrdinalIgnoreCase)
-
+        public bool IsError => _processingState == FileProcessingState.Error
+            || _status.Contains("Error", System.StringComparison.OrdinalIgnoreCase)
             || _status.Contains("Fail", System.StringComparison.OrdinalIgnoreCase)
             || _status.Contains("Invalid", System.StringComparison.OrdinalIgnoreCase);
 
-        public bool IsActive => _status.Contains("...", System.StringComparison.OrdinalIgnoreCase)
-
+        public bool IsActive => _processingState == FileProcessingState.Processing
+            || _status.Contains("...", System.StringComparison.OrdinalIgnoreCase)
             || _status.Contains("Converting", System.StringComparison.OrdinalIgnoreCase);
 
         public string StatusColor => IsError ? "#E74C3C" : (IsCompleted ? "#01D701" : "#A0A0AC");

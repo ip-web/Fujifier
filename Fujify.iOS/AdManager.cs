@@ -118,11 +118,13 @@ public class AdManager
                 if (error != null)
                 {
                     System.Diagnostics.Debug.WriteLine($"[Fujify iOS Ads] Splash App Open Ad load error ({adUnitId}): {error.LocalizedDescription}");
+#if DEBUG
                     if (adUnitId != TestSplashAppOpenUnitId)
                     {
                         System.Diagnostics.Debug.WriteLine("[Fujify iOS Ads] Falling back to Google Test Splash App Open Unit...");
                         UIApplication.SharedApplication.BeginInvokeOnMainThread(() => LoadAndShowSplashInternal(TestSplashAppOpenUnitId));
                     }
+#endif
                     return;
                 }
 
@@ -179,11 +181,13 @@ public class AdManager
                 {
                     System.Diagnostics.Debug.WriteLine($"[Fujify iOS Ads] Interstitial preload error ({adUnitId}): {error.LocalizedDescription}");
                     _interstitialAd = null;
+#if DEBUG
                     if (adUnitId != TestInterstitialUnitId)
                     {
                         System.Diagnostics.Debug.WriteLine("[Fujify iOS Ads] Falling back to Google Test Interstitial Unit...");
                         UIApplication.SharedApplication.BeginInvokeOnMainThread(() => PreloadInterstitialInternal(TestInterstitialUnitId));
                     }
+#endif
                     return;
                 }
 
@@ -269,11 +273,13 @@ public class AdManager
             _bannerView.ReceiveAdFailed += (s, e) =>
             {
                 System.Diagnostics.Debug.WriteLine($"[Fujify iOS Ads] Banner Ad failed to load ({adUnitId}): {e.Error?.LocalizedDescription}");
+#if DEBUG
                 if (adUnitId != TestBannerUnitId)
                 {
                     System.Diagnostics.Debug.WriteLine("[Fujify iOS Ads] Falling back to Google Test Banner Unit...");
                     UIApplication.SharedApplication.BeginInvokeOnMainThread(() => LoadBannerInternal(TestBannerUnitId));
                 }
+#endif
             };
 
             topVc.View.AddSubview(_bannerView);

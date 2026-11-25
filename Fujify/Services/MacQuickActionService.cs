@@ -206,7 +206,7 @@ namespace Fujify.Services
 	<key>CFBundleName</key>
 	<string>{safeDisplayName}</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.2.0</string>
+	<string>2.2.1</string>
 	<key>NSServices</key>
 	<array>
 		<dict>
