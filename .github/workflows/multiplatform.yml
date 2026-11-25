@@ -218,9 +218,9 @@ jobs:
           echo "Listing all installed Xcode versions:"
           ls -d /Applications/Xcode*.app || true
           SELECTED_XCODE=""
-          for xc in $(ls -d /Applications/Xcode_16*.app /Applications/Xcode*.app 2>/dev/null | sort -u -r); do
+          for xc in $(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -r) $(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -r) /Applications/Xcode.app; do
             if [ -x "$xc/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++" ] && [ -d "$xc/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs" ]; then
-              if "$xc/Contents/Developer/usr/bin/xcodebuild" -sdk macosx -version >/dev/null 2>&1; then
+              if "$xc/Contents/Developer/usr/bin/xcodebuild" -sdk macosx -version >/dev/null 2>&1 && DEVELOPER_DIR="$xc/Contents/Developer" xcrun -find clang >/dev/null 2>&1; then
                 echo "Found verified working Xcode toolchain: $xc"
                 SELECTED_XCODE="$xc"
                 break
@@ -230,11 +230,14 @@ jobs:
           if [ -n "$SELECTED_XCODE" ]; then
             echo "Selecting Xcode: $SELECTED_XCODE"
             sudo xcode-select -s "$SELECTED_XCODE/Contents/Developer"
+            echo "DEVELOPER_DIR=$SELECTED_XCODE/Contents/Developer" >> "$GITHUB_ENV"
+            export DEVELOPER_DIR="$SELECTED_XCODE/Contents/Developer"
           fi
           sudo xcodebuild -license accept 2>/dev/null || true
           xcrun --kill-cache 2>/dev/null || true
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-path
+          xcrun -find clang
           xcrun -find clang++
           xcrun -find dsymutil
 
