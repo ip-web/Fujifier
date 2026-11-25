@@ -25,6 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InterfaceDefinition Remove="Resources\LaunchScreen.storyboard" />
     <BundleResource Include="Resources\**\*" Exclude="Resources\LaunchScreen.storyboard" />
   </ItemGroup>
 
